@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Schulte VR - Pro Trainer</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+    </style>
+</head>
+<body>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+        // --- ГЛОБАЛЬНОЕ СОСТОЯНИЕ ---
+        let currentSize = 3; 
+        let targetNumber = 1;
+        let startTime = null;
+        let isFinished = false;
+        let mistakes = 0;
+        let lastTick = 0;
+
+        let interactables = []; 
+        const controllers = [];
+        const tempMatrix = new THREE.Matrix4();
+
+        // --- ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020202);
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        document.body.appendChild(VRButton.createButton(renderer));
+
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+
+        // Вспомогательная функция для генерации текста
+        function createTextTex(text, size = 45, color = 'white', bg = '#111') {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512; canvas.height = 300;
+            if (bg) { ctx.fillStyle = bg; ctx.fillRect(0,0,512,300); }
+            ctx.fillStyle = color;
+            ctx.font = `bold ${size}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const lines = text.split('\n');
+            lines.forEach((line, i) => {
+                ctx.fillText(line, 256, (300/(lines.length + 1)) * (i + 1));
+            });
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // --- UI ПАНЕЛЬ ---
+        const uiGroup = new THREE.Group();
+        uiGroup.position.set(-1.8, 1.5, -1.8);
+        uiGroup.rotation.y = 0.7;
+        scene.add(uiGroup);
+
+        const infoMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.2, 0.7),
+            new THREE.MeshBasicMaterial({ map: createTextTex('Инициализация...') })
+        );
+        uiGroup.add(infoMesh);
+
+        const nextBtn = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.2, 0.25),
+            new THREE.MeshBasicMaterial({ map: createTextTex('СЛЕД. УРОВЕНЬ', 40, '#555', '#222') })
+        );
+        nextBtn.position.set(0, -0.55, 0);
+        nextBtn.userData = { isNext: true };
+        uiGroup.add(nextBtn);
+
+        const restartBtn = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.2, 0.25),
+            new THREE.MeshBasicMaterial({ map: createTextTex('РЕСТАРТ', 40, 'white', '#441111') })
+        );
+        restartBtn.position.set(0, -0.85, 0);
+        restartBtn.userData = { isRestart: true };
+        uiGroup.add(restartBtn);
+
+        // --- СЕТКА ---
+        const gridGroup = new THREE.Group();
+        gridGroup.position.set(0, 1.5, -2.5);
+        scene.add(gridGroup);
+
+        function updateUI(currentTime = 0) {
+            const records = JSON.parse(localStorage.getItem(`rec_v3_${currentSize}`) || '[]');
+            const recordStr = records.length > 0 ? records.map((r, i) => `${i+1}. ${r}с`).join(' | ') : "Нет";
+
+            let status = "";
+            if (isFinished) {
+                status = mistakes === 0 ? "ИДЕАЛЬНО!\nБез ошибок" : `ЗАВЕРШЕНО\nОшибок: ${mistakes}`;
+            } else {
+                const timer = startTime ? ((currentTime - startTime) / 1000).toFixed(1) : "0.0";
+                status = `УРОВЕНЬ: ${currentSize}x${currentSize}\nЦЕЛЬ: ${targetNumber} | ОШИБКИ: ${mistakes}\nВРЕМЯ: ${timer}с`;
+            }
+
+            infoMesh.material.map = createTextTex(`${status}\n\nРЕКОРДЫ:\n${recordStr}`, 32);
+            
+            // Кнопка след. уровня активна только при 0 ошибок
+            if (isFinished && mistakes === 0) {
+                nextBtn.material.map = createTextTex('СЛЕДУЮЩИЙ УРОВЕНЬ', 40, 'white', '#006600');
+                nextBtn.userData.active = true;
+            } else {
+                nextBtn.material.map = createTextTex('СЛЕД. УРОВЕНЬ', 40, '#555', '#222');
+                nextBtn.userData.active = false;
+            }
+        }
+
+        function saveScore(time) {
+            let records = JSON.parse(localStorage.getItem(`rec_v3_${currentSize}`) || '[]');
+            records.push(parseFloat(time));
+            records.sort((a, b) => a - b);
+            localStorage.setItem(`rec_v3_${currentSize}`, JSON.stringify(records.slice(0, 3)));
+        }
+
+        function initGrid() {
+            while(gridGroup.children.length > 0) {
+                const child = gridGroup.children[0];
+                if (child.material) child.material.dispose();
+                gridGroup.remove(child);
+            }
+
+            interactables = [restartBtn, nextBtn];
+            const count = currentSize * currentSize;
+            const nums = Array.from({ length: count }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+
+            const spacing = Math.min(0.5, 2 / currentSize); 
+            const offset = (currentSize - 1) * spacing / 2;
+
+            nums.forEach((num, i) => {
+                const x = (i % currentSize) * spacing - offset;
+                const y = Math.floor(i / currentSize) * -spacing + offset;
+
+                const card = new THREE.Mesh(
+                    new THREE.PlaneGeometry(spacing * 0.9, spacing * 0.9),
+                    new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+                );
+                card.position.set(x, y, 0);
+                card.userData = { number: num };
+
+                const label = new THREE.Mesh(
+                    new THREE.PlaneGeometry(spacing * 0.7, spacing * 0.7),
+                    new THREE.MeshBasicMaterial({ map: createTextTex(num.toString(), 110, 'white', null), transparent: true })
+                );
+                label.position.set(x, y, 0.01);
+                label.raycast = () => {}; 
+
+                gridGroup.add(card);
+                gridGroup.add(label);
+                interactables.push(card);
+            });
+
+            targetNumber = 1;
+            isFinished = false;
+            mistakes = 0;
+            startTime = null;
+            updateUI();
+        }
+
+        // --- ЛОГИКА КОНТРОЛЛЕРОВ ---
+        const raycaster = new THREE.Raycaster();
+
+        function handlePointer(ctrl, isClick) {
+            tempMatrix.identity().extractRotation(ctrl.matrixWorld);
+            raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
+            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+            const hits = raycaster.intersectObjects(interactables);
+
+            if (hits.length > 0) {
+                const obj = hits[0].object;
+
+                if (obj.userData.isRestart) {
+                    ctrl.children[0].material.color.set(0xff00ff);
+                    if (isClick) { vibrate(ctrl); initGrid(); }
+                    return;
+                }
+
+                if (obj.userData.isNext && nextBtn.userData.active) {
+                    ctrl.children[0].material.color.set(0x00ff00);
+                    if (isClick) { vibrate(ctrl); currentSize++; initGrid(); }
+                    return;
+                }
+
+                const num = obj.userData.number;
+                if (!num || isFinished) return;
+
+                ctrl.children[0].material.color.set(num === targetNumber ? 0x00ff00 : 0xff0000);
+
+                if (isClick) {
+                    vibrate(ctrl);
+                    if (num === targetNumber) {
+                        if (num === 1) startTime = Date.now();
+                        obj.material.color.set(0x004400);
+                        targetNumber++;
+                        if (targetNumber > currentSize * currentSize) {
+                            isFinished = true;
+                            saveScore(((Date.now() - startTime) / 1000).toFixed(2));
+                        }
+                    } else {
+                        mistakes++;
+                        obj.material.color.set(0x440000);
+                        setTimeout(() => { if(!isFinished) obj.material.color.set(0x1a1a1a); }, 200);
+                    }
+                    updateUI(Date.now());
+                }
+            } else {
+                ctrl.children[0].material.color.set(0xffffff);
+            }
+        }
+
+        function vibrate(ctrl) {
+            if (ctrl.inputSource?.gamepad?.hapticActuators) {
+                ctrl.inputSource.gamepad.hapticActuators[0].pulse(0.5, 40);
+            }
+        }
+
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.01, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff }));
+        dot.position.set(0, 1.5, -2.48);
+        scene.add(dot);
+
+        function setupHand(index) {
+            const controller = renderer.xr.getController(index);
+            controller.addEventListener('selectstart', () => handlePointer(controller, true));
+            controller.addEventListener('connected', (e) => { controller.inputSource = e.data; });
+            const line = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-10)]),
+                new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+            );
+            controller.add(line);
+            scene.add(controller);
+            controllers.push(controller);
+        }
+
+        setupHand(0); setupHand(1);
+        initGrid();
+
+        renderer.setAnimationLoop((time) => {
+            if (startTime && !isFinished) {
+                // Обновляем UI раз в 100мс для производительности
+                if (time - lastTick > 100) {
+                    updateUI(Date.now());
+                    lastTick = time;
+                }
+            }
+            controllers.forEach(c => handlePointer(c, false));
+            renderer.render(scene, camera);
+        });
+    </script>
+</body>
+</html>

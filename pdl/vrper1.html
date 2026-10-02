@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel Vision Pro - Cumulative Mode</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene background="color: #1a1a1a" fog="type: exponential; color: #1a1a1a; density: 0.05">
+      
+      <a-assets>
+        <audio id="success-sound" src="success.mp3" preload="auto"></audio>
+        <audio id="error-sound" src="error.mp3" preload="auto"></audio>
+      </a-assets>
+
+      <a-entity id="rig" position="0 0.3 0">
+        <a-camera look-controls wasd-controls="enabled: false" position="0 1.6 0">
+          <a-sphere id="fixation-dot" position="0 0 -1.1" radius="0.005" color="#ff0000" shader="flat" visible="false"></a-sphere>
+          <a-entity cursor="rayOrigin: mouse"></a-entity>
+        </a-camera>
+        <a-entity oculus-touch-controls="hand: left"></a-entity>
+        <a-entity oculus-touch-controls="hand: right" laser-controls="hand: right" raycaster="objects: .clickable; far: 10"></a-entity>
+      </a-entity>
+
+      <a-sky color="#222"></a-sky>
+      <a-entity light="type: ambient; color: #BBB; intensity: 0.6"></a-entity>
+      <a-entity light="type: directional; color: #FFF; intensity: 0.8" position="-1 4 3"></a-entity>
+      <a-plane position="0 0.01 0" rotation="-90 0 0" width="10" height="20" color="#1E88E5" material="roughness: 0.8"></a-plane>
+
+      <a-entity id="start-screen" position="0 1.9 -2">
+        <a-plane id="start-button" class="clickable" width="1.2" height="0.6" color="#ccff00" material="shader: flat">
+          <a-text value="START 10 MIN" color="#2c2c2c" align="center" width="5" position="0 0.1 0.01"></a-text>
+          <a-text id="high-score-text" value="Best: 0" color="#2c2c2c" align="center" width="3" position="0 -0.15 0.01"></a-text>
+        </a-plane>
+      </a-entity>
+
+      <a-entity id="finish-screen" position="0 1.9 -2" visible="false">
+        <a-plane width="2" height="1.2" color="#000" material="opacity: 0.8">
+          <a-text value="TIME'S UP!" color="#FF5252" align="center" width="8" position="0 0.4 0.01"></a-text>
+          <a-text id="final-score-text" value="Score: 0" color="white" align="center" width="6" position="0 0.1 0.01"></a-text>
+          <a-plane id="restart-button" class="clickable" width="0.8" height="0.3" color="#ccff00" position="0 -0.3 0.01">
+            <a-text value="RESTART" color="#2c2c2c" align="center" width="4"></a-text>
+          </a-plane>
+        </a-plane>
+      </a-entity>
+
+      <a-entity id="game-container" position="0 1.9 -3" visible="false"></a-entity>
+
+      <a-entity id="ui-panel" position="0 3.6 -2.8" rotation="15 0 0" visible="false">
+        <a-plane width="1.6" height="0.3" color="#000" material="shader: flat; opacity: 0.5; transparent: true">
+          <a-text id="timer-text" value="10:00" color="#ccff00" align="left" position="-0.7 0 0.01" width="2.5"></a-text>
+          <a-text id="stat-text" value="Grid: 5x5 | Score: 0" color="white" align="right" position="0.7 0 0.01" width="2"></a-text>
+        </a-plane>
+      </a-entity>
+
+      <a-entity id="success-sound-entity" sound="src: #success-sound"></a-entity>
+      <a-entity id="error-sound-entity" sound="src: #error-sound"></a-entity>
+
+    </a-scene>
+
+    <script>
+      const container = document.getElementById('game-container');
+      const startScreen = document.getElementById('start-screen');
+      const finishScreen = document.getElementById('finish-screen');
+      const uiPanel = document.getElementById('ui-panel');
+      const fixationDot = document.getElementById('fixation-dot');
+      
+      const timerText = document.getElementById('timer-text');
+      const statText = document.getElementById('stat-text');
+      const finalScoreText = document.getElementById('final-score-text');
+      const highScoreDisplay = document.getElementById('high-score-text');
+
+      let score = 0;
+      let totalCorrect = 0; 
+      let gridSize = 5;
+      let currentFlash = 600;
+      let gameActive = false;
+      let timerInterval = null;
+      let timeLeft = 600; 
+
+      let highScore = localStorage.getItem('padelHighScore') || 0;
+      highScoreDisplay.setAttribute('value', `Best: ${highScore}`);
+
+      function startTimer() {
+        timerInterval = setInterval(() => {
+          timeLeft--;
+          if (timeLeft <= 0) {
+            endGame();
+          } else {
+            updateTimerDisplay();
+          }
+        }, 1000);
+      }
+
+      function updateTimerDisplay() {
+        const mins = Math.floor(timeLeft / 60);
+        const secs = timeLeft % 60;
+        timerText.setAttribute('value', `${mins}:${secs < 10 ? '0' : ''}${secs}`);
+      }
+
+      function endGame() {
+        clearInterval(timerInterval);
+        gameActive = false;
+        container.setAttribute('visible', 'false');
+        uiPanel.setAttribute('visible', 'false');
+        fixationDot.setAttribute('visible', 'false');
+        
+        finishScreen.setAttribute('visible', 'true');
+        finishScreen.setAttribute('position', '0 1.9 -2');
+        finalScoreText.setAttribute('value', `Total Score: ${score}`);
+
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem('padelHighScore', highScore);
+          highScoreDisplay.setAttribute('value', `Best: ${highScore}`);
+        }
+      }
+
+      function startGame() {
+        score = 0;
+        totalCorrect = 0;
+        timeLeft = 600;
+        gridSize = 5;
+        currentFlash = 600;
+        
+        startScreen.setAttribute('visible', 'false');
+        startScreen.setAttribute('position', '0 -10 0');
+        finishScreen.setAttribute('visible', 'false');
+        finishScreen.setAttribute('position', '0 -10 0');
+        
+        container.setAttribute('visible', 'true');
+        uiPanel.setAttribute('visible', 'true');
+        fixationDot.setAttribute('visible', 'true');
+
+        updateTimerDisplay();
+        updateUI();
+        startTimer();
+        setupGrid();
+      }
+
+      document.getElementById('start-button').addEventListener('mousedown', startGame);
+      document.getElementById('restart-button').addEventListener('mousedown', startGame);
+
+      function setupGrid() {
+        if (timeLeft <= 0) return;
+        container.innerHTML = '';
+        
+        // Сложность зависит от серии правильных ответов (totalCorrect)
+        gridSize = 5 + Math.floor(totalCorrect / 5);
+        gridSize = Math.min(gridSize, 8);
+
+        const numTiles = gridSize * gridSize;
+        const targetIndex = Math.floor(Math.random() * numTiles);
+        const spacing = 3.8 / gridSize; 
+        const tileSize = spacing * 0.85;
+
+        const roundSymbols = [];
+
+        for (let i = 0; i < numTiles; i++) {
+          const row = Math.floor(i / gridSize);
+          const col = i % gridSize;
+          const posX = (col - (gridSize - 1) / 2) * spacing;
+          const posY = ((gridSize - 1) / 2 - row) * spacing;
+
+          const tile = document.createElement('a-plane');
+          tile.setAttribute('position', `${posX} ${posY} 0`);
+          tile.setAttribute('width', tileSize);
+          tile.setAttribute('height', tileSize);
+          tile.setAttribute('class', 'tile clickable');
+          tile.setAttribute('color', '#1565C0');
+
+          const symbol = document.createElement('a-entity');
+          symbol.setAttribute('visible', 'false');
+          const ring = document.createElement('a-torus');
+          ring.setAttribute('radius', tileSize * 0.25);
+          ring.setAttribute('radius-tubular', tileSize * 0.04);
+          ring.setAttribute('color', '#ccff00');
+          
+          if (i !== targetIndex) {
+            ring.setAttribute('arc', '290');
+            ring.setAttribute('rotation', `0 0 ${[0, 90, 180, 270][Math.floor(Math.random()*4)]}`);
+          }
+
+          symbol.appendChild(ring);
+          tile.appendChild(symbol);
+          container.appendChild(tile);
+          roundSymbols.push(symbol);
+
+          tile.addEventListener('mousedown', () => {
+            if (!gameActive) return;
+            tile.setAttribute('color', '#ffffff');
+            setTimeout(() => tile.setAttribute('color', '#1565C0'), 150);
+            
+            gameActive = false;
+            
+            if (i === targetIndex) {
+              // ПРАВИЛЬНО
+              totalCorrect++; 
+              score++;        
+              currentFlash = Math.max(50, currentFlash - 40);
+              document.getElementById('success-sound-entity').components.sound.playSound();
+            } else {
+              // ОШИБКА - ОТКАТ НА ШАГ НАЗАД
+              totalCorrect = Math.max(0, totalCorrect - 1); // Откатываем прогресс на 1
+              currentFlash = Math.min(600, currentFlash + 40); // Замедляем вспышку обратно
+              
+              // Штраф к счету (опционально, сейчас просто не начисляем баллы)
+              document.getElementById('error-sound-entity').components.sound.playSound();
+            }
+            
+            updateUI();
+            setTimeout(setupGrid, 800);
+          });
+        }
+
+        setTimeout(() => {
+          roundSymbols.forEach(s => s.setAttribute('visible', 'true'));
+          setTimeout(() => {
+            roundSymbols.forEach(s => s.setAttribute('visible', 'false'));
+            gameActive = true;
+          }, currentFlash);
+        }, 1200);
+      }
+
+      function updateUI() {
+        statText.setAttribute('value', `Grid: ${gridSize}x${gridSize} | Score: ${score}`);
+      }
+    </script>
+  </body>
+</html>

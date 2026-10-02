@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Schulte VR - Final Fix</title>
+    <style>body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }</style>
+</head>
+<body>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+        const SIZE = 5;
+        let targetNumber = 1;
+        let startTime = null;
+        let isFinished = false;
+        const clickableObjects = []; 
+        const controllers = [];
+
+        // --- СЦЕНА ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        document.body.appendChild(VRButton.createButton(renderer));
+
+        scene.add(new THREE.AmbientLight(0xffffff, 1));
+
+        // --- ТЕКСТУРЫ ---
+        function createTextTexture(text, size = 60, color = 'white', bgColor = 'transparent') {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512; canvas.height = 256;
+            if (bgColor !== 'transparent') {
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(0,0,512,256);
+            }
+            ctx.fillStyle = color;
+            ctx.font = `bold ${size}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 256, 128);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // --- ИНФО-ПАНЕЛЬ (СПРАВА ОТ ТАБЛИЦЫ) ---
+        const infoPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(1, 0.5),
+            new THREE.MeshBasicMaterial({ map: createTextTexture('ЦЕЛЬ: 1', 70, 'white', '#111'), transparent: true })
+        );
+        // Смещаем вправо (x: 1.5), на уровень глаз (y: 1.5), чуть назад (z: -1.8)
+        infoPlane.position.set(1.5, 1.5, -1.8);
+        infoPlane.rotation.y = -0.5; // Поворачиваем к игроку
+        infoPlane.raycast = () => {}; // Игнорируем лучи
+        scene.add(infoPlane);
+
+        // --- ТАБЛИЦА ШУЛЬТЕ ---
+        const gridGroup = new THREE.Group();
+        gridGroup.position.set(0, 1.5, -2);
+        scene.add(gridGroup);
+
+        const numbers = Array.from({ length: SIZE * SIZE }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+
+        numbers.forEach((num, i) => {
+            const spacing = 0.45;
+            const offset = (SIZE - 1) * spacing / 2;
+            const x = (i % SIZE) * spacing - offset;
+            const y = Math.floor(i / SIZE) * -spacing + offset;
+
+            const card = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.4, 0.4),
+                new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+            );
+            card.position.set(x, y, 0);
+            card.userData = { number: num };
+            
+            const label = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.3, 0.3),
+                new THREE.MeshBasicMaterial({ map: createTextTexture(num.toString(), 110), transparent: true })
+            );
+            label.position.set(x, y, 0.01);
+            label.raycast = () => {}; 
+
+            gridGroup.add(card);
+            gridGroup.add(label);
+            clickableObjects.push(card); 
+        });
+
+        // Голубая точка в центре
+        const centerDot = new THREE.Mesh(
+            new THREE.SphereGeometry(0.01, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0x00ffff })
+        );
+        centerDot.position.set(0, 1.5, -1.98);
+        scene.add(centerDot);
+
+        // --- ВЗАИМОДЕЙСТВИЕ ---
+        const raycaster = new THREE.Raycaster();
+
+        function checkPointer(controller, isClick = false) {
+            raycaster.setFromObject(controller);
+            const intersects = raycaster.intersectObjects(clickableObjects);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                const num = hit.userData.number;
+
+                // Визуальный отклик луча: зеленый на нужной цели, желтый на остальных
+                controller.children[0].material.color.set(num === targetNumber ? 0x00ff00 : 0xffaa00);
+
+                if (isClick && num === targetNumber) {
+                    // Вибрация (Haptic feedback) для Quest 2
+                    if (controller.inputSource && controller.inputSource.gamepad && controller.inputSource.gamepad.hapticActuators) {
+                        controller.inputSource.gamepad.hapticActuators[0].pulse(0.6, 50);
+                    }
+
+                    if (num === 1) startTime = Date.now();
+                    hit.material.color.set(0x008800); 
+                    targetNumber++;
+                    
+                    if (targetNumber > SIZE * SIZE) {
+                        const score = ((Date.now() - startTime) / 1000).toFixed(2);
+                        infoPlane.material.map = createTextTexture(`ВРЕМЯ: ${score}с`, 50, '#00ff00', '#111');
+                        isFinished = true;
+                    } else {
+                        infoPlane.material.map = createTextTexture(`ЦЕЛЬ: ${targetNumber}`, 70, 'white', '#111');
+                    }
+                }
+            } else {
+                controller.children[0].material.color.set(0xffffff);
+            }
+        }
+
+        // --- ИНИЦИАЛИЗАЦИЯ ОБЕИХ РУК ---
+        function buildController(index) {
+            const controller = renderer.xr.getController(index);
+            
+            // Основное событие клика (Триггер)
+            controller.addEventListener('selectstart', () => checkPointer(controller, true));
+            
+            // Линия-указка
+            const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-10)]);
+            const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xffffff }));
+            controller.add(line);
+            
+            scene.add(controller);
+            controllers.push(controller);
+        }
+
+        buildController(0); // Обычно левый
+        buildController(1); // Обычно правый
+
+        // Цикл анимации
+        renderer.setAnimationLoop(() => {
+            if (!isFinished) {
+                controllers.forEach(c => checkPointer(c, false));
+            }
+            renderer.render(scene, camera);
+        });
+    </script>
+</body>
+</html>

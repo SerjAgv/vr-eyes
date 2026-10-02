@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel Pro: Extreme Corner Trainer</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene shadow="type: pcfsoft">
+      <a-assets>
+        <img id="grid" src="https://img.freepik.com/free-vector/black-metal-wire-mesh-pattern-background_1017-26330.jpg">
+      </a-assets>
+
+      <a-sky color="#87CEEB"></a-sky>
+      <a-light type="ambient" intensity="0.5"></a-light>
+      <a-light type="directional" position="2 4 -3" intensity="0.7" castShadow="true"></a-light>
+
+      <a-plane position="0 0 -5" rotation="-90 0 0" width="10" height="20" color="#2c5d3f" shadow></a-plane>
+      <a-plane position="0 0.02 -5" rotation="-90 0 0" width="0.1" height="20" color="white"></a-plane> 
+      
+      <a-box position="0 1.5 -10" width="10" height="3" depth="0.1" color="#88ccff" opacity="0.3" transparent="true"></a-box>
+      <a-box position="-5 1.5 -7.5" width="0.1" height="3" depth="5" color="#88ccff" opacity="0.3" transparent="true"></a-box>
+      <a-box position="5 1.5 -7.5" width="0.1" height="3" depth="5" color="#88ccff" opacity="0.3" transparent="true"></a-box>
+      <a-plane position="-5 1.5 -2.5" rotation="0 90 0" width="5" height="3" src="#grid" repeat="5 3" opacity="0.8"></a-plane>
+      <a-plane position="5 1.5 -2.5" rotation="0 -90 0" width="5" height="3" src="#grid" repeat="5 3" opacity="0.8"></a-plane>
+
+      <a-entity id="rig" position="0 0 0">
+        <a-camera look-controls>
+          <a-cursor fuse="true" fuse-timeout="100" color="#ccff00" raycaster="objects: .target"></a-cursor>
+        </a-camera>
+      </a-entity>
+
+      <a-entity position="0 2.5 -3">
+        <a-text id="score" value="SCORE: 0" color="black" width="4" position="-1 0 0"></a-text>
+        <a-text id="timer" value="TIME: 15:00" color="red" width="4" position="0.5 0 0"></a-text>
+      </a-entity>
+
+      <script>
+        let score = 0;
+        let timeLeft = 15 * 60; // 15 минут в секундах
+        const scene = document.querySelector('a-scene');
+        const scoreDisplay = document.querySelector('#score');
+        const timerDisplay = document.querySelector('#timer');
+
+        // Таймер обратного отсчета
+        const countdown = setInterval(() => {
+          timeLeft--;
+          const mins = Math.floor(timeLeft / 60);
+          const secs = timeLeft % 60;
+          timerDisplay.setAttribute('value', `TIME: ${mins}:${secs < 10 ? '0' : ''}${secs}`);
+
+          if (timeLeft <= 0) {
+            clearInterval(countdown);
+            clearInterval(gameInterval);
+            timerDisplay.setAttribute('value', "TRAINING COMPLETE!");
+            timerDisplay.setAttribute('color', "green");
+          }
+        }, 1000);
+
+        function spawnBall() {
+          const ball = document.createElement('a-sphere');
+          ball.setAttribute('radius', '0.12');
+          ball.setAttribute('color', '#ccff00');
+          ball.setAttribute('class', 'target');
+          ball.setAttribute('shadow', '');
+
+          const type = Math.floor(Math.random() * 3); 
+          let p1, p2, p3;
+          const start = { x: (Math.random()-0.5)*2, y: 1.5, z: -2 };
+
+          if (type === 0) { // Прямой
+            p1 = { x: start.x, y: 0.12, z: -7 };
+            p2 = { x: start.x, y: 1, z: -9.9 };
+            p3 = { x: (Math.random()-0.5)*4, y: 1.2, z: 2 };
+          } else { // Угловой
+            const side = type === 1 ? -1 : 1;
+            p1 = { x: 4.9 * side, y: 0.8, z: -8 };
+            p2 = { x: 3 * side, y: 1, z: -9.9 };
+            p3 = { x: (Math.random()-0.5)*3, y: 1.2, z: 2 };
+          }
+
+          ball.setAttribute('position', `${start.x} ${start.y} ${start.z}`);
+          ball.setAttribute('animation__1', { property: 'position', to: `${p1.x} ${p1.y} ${p1.z}`, dur: 600, easing: 'linear' });
+          ball.setAttribute('animation__2', { property: 'position', from: `${p1.x} ${p1.y} ${p1.z}`, to: `${p2.x} ${p2.y} ${p2.z}`, dur: 300, delay: 600, easing: 'linear' });
+          ball.setAttribute('animation__3', { property: 'position', from: `${p2.x} ${p2.y} ${p2.z}`, to: `${p3.x} ${p3.y} ${p3.z}`, dur: 1000, delay: 900, easing: 'linear' });
+
+          ball.addEventListener('mouseenter', () => {
+            score++;
+            scoreDisplay.setAttribute('value', `SCORE: ${score}`);
+            ball.setAttribute('color', '#ff0000');
+            setTimeout(() => { if(ball.parentNode) ball.remove(); }, 100);
+          });
+
+          setTimeout(() => { if(ball.parentNode) ball.remove(); }, 3500);
+          scene.appendChild(ball);
+        }
+
+        const gameInterval = setInterval(spawnBall, 1000);
+      </script>
+    </a-scene>
+  </body>
+</html>

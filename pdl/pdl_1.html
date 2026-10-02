@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel Wall Rebound Trainer</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene shadow="type: pcfsoft">
+      <a-sky color="#111"></a-sky>
+      <a-light type="ambient" intensity="0.6"></a-light>
+      <a-light type="directional" position="1 5 2" intensity="0.8" castShadow="true"></a-light>
+
+      <a-plane position="0 0 -3" rotation="-90 0 0" width="8" height="12" color="#2c5d3f" static-body></a-plane> 
+      <a-box position="0 1.5 -9" width="8" height="3" depth="0.1" color="#88ccff" opacity="0.4" transparent="true"></a-box> <a-box position="0 0.1 -9" width="8" height="0.2" depth="0.2" color="white"></a-box> <a-entity id="rig" position="0 0 0">
+        <a-camera look-controls wasd-controls-enabled="false">
+          <a-cursor fuse="true" fuse-timeout="150" color="#ccff00"></a-cursor>
+        </a-camera>
+      </a-entity>
+
+      <a-text id="score" value="SCORE: 0" position="-0.8 2.5 -3" color="white" width="4"></a-text>
+      <a-text value="Watch the rebound!" position="-1 2.2 -3" color="#aaa" width="3"></a-text>
+
+      <script>
+        let score = 0;
+        const scene = document.querySelector('a-scene');
+        const scoreDisplay = document.querySelector('#score');
+
+        function createBall() {
+          const ball = document.createElement('a-sphere');
+          ball.setAttribute('radius', '0.12');
+          ball.setAttribute('color', '#ccff00');
+          ball.setAttribute('shadow', '');
+
+          // Логика траектории (падел-стиль):
+          // 1. Старт за спиной игрока или сбоку
+          // 2. Удар о пол перед стеной
+          // 3. Удар о стену
+          // 4. Вылет на игрока
+          
+          const startPos = { x: (Math.random() - 0.5) * 4, y: 2, z: -2 };
+          const floorHit = { x: (Math.random() - 0.5) * 2, y: 0.12, z: -7 };
+          const wallHit = { x: (Math.random() - 0.5) * 4, y: 0.5 + Math.random() * 1.5, z: -8.9 };
+          const endPos = { x: (Math.random() - 0.5) * 3, y: 1.2, z: 2 };
+
+          ball.setAttribute('position', `${startPos.x} ${startPos.y} ${startPos.z}`);
+
+          // Цепочка анимаций для имитации физики отскока
+          ball.setAttribute('animation__1', {
+            property: 'position',
+            to: `${floorHit.x} ${floorHit.y} ${floorHit.z}`,
+            dur: 800,
+            easing: 'easeInQuad'
+          });
+
+          ball.setAttribute('animation__2', {
+            property: 'position',
+            from: `${floorHit.x} ${floorHit.y} ${floorHit.z}`,
+            to: `${wallHit.x} ${wallHit.y} ${wallHit.z}`,
+            dur: 400,
+            delay: 800,
+            easing: 'easeOutQuad'
+          });
+
+          ball.setAttribute('animation__3', {
+            property: 'position',
+            from: `${wallHit.x} ${wallHit.y} ${wallHit.z}`,
+            to: `${endPos.x} ${endPos.y} ${endPos.z}`,
+            dur: 1200,
+            delay: 1200,
+            easing: 'linear'
+          });
+
+          // Регистрация попадания (взглядом)
+          ball.addEventListener('mouseenter', () => {
+            score++;
+            scoreDisplay.setAttribute('value', `SCORE: ${score}`);
+            ball.setAttribute('color', '#00ff00');
+            ball.setAttribute('scale', '1.5 1.5 1.5');
+            setTimeout(() => { if(ball.parentNode) ball.remove(); }, 100);
+          });
+
+          // Автоудаление
+          setTimeout(() => { if(ball.parentNode) ball.remove(); }, 3000);
+
+          scene.appendChild(ball);
+        }
+
+        // Запуск мячей каждые 2.5 секунды
+        setInterval(createBall, 1500);
+      </script>
+    </a-scene>
+  </body>
+</html>

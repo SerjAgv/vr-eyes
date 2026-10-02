@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel VR: Perpetual Bounce</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene shadow="type: pcfsoft" raycaster="objects: .clickable, .ball">
+      
+      <a-assets>
+        <img id="settings-icon" src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png">
+      </a-assets>
+
+      <a-sky color="#C0D8E0"></a-sky>
+      <a-light type="ambient" intensity="0.5"></a-light>
+      <a-light type="directional" position="5 10 5" intensity="0.7"></a-light>
+
+      <a-plane id="court-floor" position="0 0 -5" rotation="-90 0 0" width="14" height="24" color="#5C8A6A"></a-plane>
+
+      <a-sphere id="game-ball" class="ball clickable" radius="0.15" color="#ccff00" position="0 3 -5" 
+                physics-ball="speedX: 0.12; speedY: 0.1; speedZ: -0.12">
+      </a-sphere>
+
+      <a-entity id="rig" position="0 0 2">
+        <a-camera look-controls wasd-controls-enabled="false">
+          <a-cursor fuse="true" fuse-timeout="500" raycaster="objects: .ball, .clickable" color="#CCFF00" scale="0.5 0.5 0.5"></a-cursor>
+          
+          <a-entity position="0 1.2 -2">
+            <a-text id="ball-stats" value="Balls: 0" align="center" color="white" width="2.5" position="-0.5 0.4 0"></a-text>
+            <a-text id="vision-stats" value="Vision: 0/0" align="center" color="#FF4444" width="2.5" position="0.5 0.4 0"></a-text>
+            <a-image id="settings-btn" class="clickable" src="#settings-icon" position="1 -0.6 0" width="0.12" height="0.12" opacity="0.4" onclick="toggleMenu()"></a-image>
+
+            <a-entity id="settings-panel" visible="false" position="0 -0.1 0">
+                <a-plane width="1.8" height="0.4" color="#111" opacity="0.9" class="clickable"></a-plane>
+                <a-box class="clickable" position="0 0 0.01" width="1" height="0.2" color="#444" onclick="resetBall()"><a-text value="RESET BALL" align="center" width="2.5"></a-text></a-box>
+            </a-entity>
+          </a-entity>
+        </a-camera>
+
+        <a-entity laser-controls="hand: left" raycaster="objects: .clickable, .ball; far: 20"></a-entity>
+        <a-entity laser-controls="hand: right" raycaster="objects: .clickable, .ball; far: 20"></a-entity>
+      </a-entity>
+
+      <script>
+        let stats = { bH: 0, vH: 0, vM: 0 };
+        const audio = new (window.AudioContext || window.webkitAudioContext)();
+
+        AFRAME.registerComponent('physics-ball', {
+          schema: {
+            speedX: {type: 'number', default: 0.12},
+            speedY: {type: 'number', default: 0.1},
+            speedZ: {type: 'number', default: -0.12}
+          },
+          tick: function (time, timeDelta) {
+            let factor = Math.min(timeDelta / 16.6, 2.0);
+            let pos = this.el.getAttribute('position');
+            
+            // ГРАВИТАЦИЯ
+            this.data.speedY -= 0.004 * factor; 
+
+            let nX = pos.x + this.data.speedX * factor;
+            let nY = pos.y + this.data.speedY * factor;
+            let nZ = pos.z + this.data.speedZ * factor;
+
+            // ОТСКОК ОТ ПОЛА С ГАРАНТИЕЙ ПРЫЖКА
+            if (nY < 0.15) { 
+                // Если скорость слишком мала, даем "пинок" вверх
+                if (Math.abs(this.data.speedY) < 0.08) {
+                    this.data.speedY = 0.15; 
+                } else {
+                    this.data.speedY = Math.abs(this.data.speedY) * 0.98; // Почти идеальный отскок
+                }
+                nY = 0.16; 
+            }
+
+            // ОТСКОК ОТ СТЕН И ПОТОЛКА (Без потери энергии)
+            if (nX > 6.5 || nX < -6.5) { this.data.speedX *= -1; }
+            if (nY > 8) { this.data.speedY *= -1; nY = 7.9; }
+            if (nZ < -10.5 || nZ > 4) { this.data.speedZ *= -1; }
+
+            // МИНИМАЛЬНАЯ СКОРОСТЬ (Чтобы мяч никогда не замирал по X и Z)
+            const MIN_S = 0.05;
+            if (Math.abs(this.data.speedX) < MIN_S) this.data.speedX = (this.data.speedX >= 0 ? 1 : -1) * MIN_S;
+            if (Math.abs(this.data.speedZ) < MIN_S) this.data.speedZ = (this.data.speedZ >= 0 ? 1 : -1) * MIN_S;
+
+            // МАКСИМАЛЬНАЯ СКОРОСТЬ
+            const MAX_S = 0.35;
+            this.data.speedX = Math.max(Math.min(this.data.speedX, MAX_S), -MAX_S);
+            this.data.speedZ = Math.max(Math.min(this.data.speedZ, MAX_S), -MAX_S);
+
+            this.el.setAttribute('position', {x: nX, y: nY, z: nZ});
+          }
+        });
+
+        function playFeedback(f) {
+          if (audio.state === 'suspended') audio.resume();
+          let o = audio.createOscillator(), g = audio.createGain();
+          o.connect(g); g.connect(audio.destination);
+          o.frequency.value = f; g.gain.exponentialRampToValueAtTime(0.01, audio.currentTime + 0.1);
+          o.start(); o.stop(audio.currentTime + 0.1);
+        }
+
+        const ball = document.querySelector('#game-ball');
+        ball.addEventListener('click', () => {
+            stats.bH++;
+            playFeedback(900);
+            updateUI();
+            let comp = ball.components['physics-ball'].data;
+            comp.speedX = (Math.random() - 0.5) * 0.4;
+            comp.speedY = 0.25; // Сильный подброс при клике
+            comp.speedZ = (Math.random() - 0.5) * 0.4;
+        });
+
+        function resetBall() {
+            ball.setAttribute('position', '0 3 -5');
+            let data = ball.components['physics-ball'].data;
+            data.speedX = 0.12; data.speedY = 0.1; data.speedZ = -0.12;
+            toggleMenu();
+        }
+
+        function spawnSpatialTarget() {
+          const t = document.createElement('a-sphere');
+          t.setAttribute('class', 'clickable');
+          t.setAttribute('radius', '0.25');
+          const x = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2);
+          const y = 1.5 + Math.random() * 4;
+          const z = -1 - Math.random() * 6;
+          t.setAttribute('position', `${x} ${y} ${z}`);
+          t.setAttribute('material', 'color: #FF4444; opacity: 0.7; transparent: true; emissive: #FF0000; emissiveIntensity: 1.5');
+          
+          t.addEventListener('click', () => {
+            stats.vH++; playFeedback(500); updateUI(); t.remove();
+          });
+          document.querySelector('a-scene').appendChild(t);
+          setTimeout(() => { if (t.parentNode) { stats.vM++; updateUI(); t.remove(); } }, 2000);
+        }
+
+        function updateUI() {
+          document.querySelector('#ball-stats').setAttribute('value', `Balls: ${stats.bH}`);
+          document.querySelector('#vision-stats').setAttribute('value', `Vision: ${stats.vH}/${stats.vM}`);
+        }
+
+        function toggleMenu() {
+            let menu = document.querySelector('#settings-panel');
+            menu.setAttribute('visible', !menu.getAttribute('visible'));
+        }
+
+        setInterval(spawnSpatialTarget, 3500);
+      </script>
+    </a-scene>
+  </body>
+</html>

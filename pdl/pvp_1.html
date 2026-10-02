@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel VR Pro: Realistic & Stats</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene shadow="type: pcfsoft" cursor="rayOrigin: mouse" raycaster="objects: .clickable, .ball">
+      
+      <a-assets>
+        <img id="grid" src="https://img.freepik.com/free-vector/black-metal-wire-mesh-pattern-background_1017-26330.jpg">
+        <img id="floor" src="https://img.freepik.com/free-photo/green-grass-texture-background_1249-535.jpg">
+      </a-assets>
+
+      <a-sky color="#87CEEB"></a-sky>
+      <a-light type="ambient" intensity="0.5"></a-light>
+      <a-light type="directional" position="2 5 -3" intensity="0.7" castShadow="true"></a-light>
+
+      <a-plane position="0 0 -5" rotation="-90 0 0" width="10" height="20" src="#floor" repeat="2 4" shadow></a-plane>
+      <a-plane position="0 0.02 -5" rotation="-90 0 0" width="0.1" height="20" color="white"></a-plane> 
+      
+      <a-box id="back-glass" position="0 1.5 -10" width="10" height="3" depth="0.1" material="color: #88ccff; opacity: 0.2; transparent: true"></a-box>
+      <a-box id="left-glass" position="-5 1.5 -7.5" width="0.1" height="3" depth="5" material="color: #88ccff; opacity: 0.2; transparent: true"></a-box>
+      <a-box id="right-glass" position="5 1.5 -7.5" width="0.1" height="3" depth="5" material="color: #88ccff; opacity: 0.2; transparent: true"></a-box>
+      
+      <a-plane position="-5 1.5 -2.5" rotation="0 90 0" width="5" height="3" src="#grid" repeat="5 3" material="opacity: 0.6; transparent: true"></a-plane>
+      <a-plane position="5 1.5 -2.5" rotation="0 -90 0" width="5" height="3" src="#grid" repeat="5 3" material="opacity: 0.6; transparent: true"></a-plane>
+
+      <a-box id="target-left" class="clickable" position="-4.98 1.5 -4" width="0.05" height="2.5" depth="2" 
+             material="opacity: 0; transparent: true; emissive: #ff0000; emissiveIntensity: 0; color: #ff0000"></a-box>
+      <a-box id="target-right" class="clickable" position="4.98 1.5 -4" width="0.05" height="2.5" depth="2" 
+             material="opacity: 0; transparent: true; emissive: #ff0000; emissiveIntensity: 0; color: #ff0000"></a-box>
+
+      <a-entity id="rig">
+        <a-camera look-controls wasd-controls-enabled="false">
+          <a-entity position="0 1.2 -2.5">
+            <a-text id="level-txt" value="LEVEL 1" align="center" color="#00fff2" width="4"></a-text>
+            <a-text id="ball-stats" value="Balls: 0 hit / 0 miss" align="center" color="#ccff00" width="2.5" position="0 0.1 0"></a-text>
+            <a-text id="vision-stats" value="Vision: 0 hit / 0 miss" align="center" color="#ff4444" width="2.5" position="0 -0.1 0"></a-text>
+            <a-text id="timer-txt" value="15:00" align="center" color="white" width="2" position="0 -0.3 0"></a-text>
+          </a-entity>
+        </a-camera>
+        <a-entity laser-controls="hand: left" raycaster="objects: .clickable, .ball; far: 10; interval: 30"></a-entity>
+        <a-entity laser-controls="hand: right" raycaster="objects: .clickable, .ball; far: 10; interval: 30"></a-entity>
+      </a-entity>
+
+      <script>
+        let stats = { ballHit: 0, ballMiss: 0, visionHit: 0, visionMiss: 0 };
+        let level = 1, ballSpeed = 1500, peripheralTime = 900, timeLeft = 15 * 60;
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(freq) {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+          osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function updateUI() {
+          document.querySelector('#ball-stats').setAttribute('value', `Balls: ${stats.ballHit} hit / ${stats.ballMiss} miss`);
+          document.querySelector('#vision-stats').setAttribute('value', `Vision: ${stats.visionHit} hit / ${stats.visionMiss} miss`);
+          let total = stats.ballHit + stats.visionHit;
+          if (total > 0 && total % 10 === 0) {
+            level = Math.floor(total / 10) + 1;
+            document.querySelector('#level-txt').setAttribute('value', `LEVEL ${level}`);
+            ballSpeed = Math.max(500, 1500 - (level * 150));
+            peripheralTime = Math.max(400, 900 - (level * 100));
+          }
+        }
+
+        function spawnBall() {
+          const ball = document.createElement('a-sphere');
+          ball.setAttribute('class', 'ball clickable');
+          ball.setAttribute('radius', '0.12');
+          ball.setAttribute('color', '#ccff00');
+          
+          const isCorner = Math.random() > 0.4;
+          const side = Math.random() > 0.5 ? 1 : -1;
+          const start = { x: 0, y: 1.5, z: -2 };
+          const p1 = isCorner ? { x: 4.9 * side, y: 0.8, z: -8 } : { x: 0, y: 0.1, z: -7 };
+          const p2 = { x: (isCorner ? 3 * side : 0), y: 1, z: -9.9 };
+          const p3 = { x: (Math.random()-0.5)*5, y: 1.2, z: 2.5 };
+
+          ball.setAttribute('position', `${start.x} ${start.y} ${start.z}`);
+          ball.setAttribute('animation__1', { property: 'position', to: `${p1.x} ${p1.y} ${p1.z}`, dur: ballSpeed * 0.3, easing: 'linear' });
+          ball.setAttribute('animation__2', { property: 'position', from: `${p1.x} ${p1.y} ${p1.z}`, to: `${p2.x} ${p2.y} ${p2.z}`, dur: ballSpeed * 0.2, delay: ballSpeed * 0.3, easing: 'linear' });
+          ball.setAttribute('animation__3', { property: 'position', from: `${p2.x} ${p2.y} ${p2.z}`, to: `${p3.x} ${p3.y} ${p3.z}`, dur: ballSpeed * 0.5, delay: ballSpeed * 0.5, easing: 'linear' });
+
+          let hit = false;
+          ball.addEventListener('mousedown', () => {
+            if(!hit) { hit = true; stats.ballHit++; playSound(880); updateUI(); ball.remove(); }
+          });
+          document.querySelector('a-scene').appendChild(ball);
+          setTimeout(() => { if (ball.parentNode) { if (!hit) { stats.ballMiss++; updateUI(); } ball.remove(); } }, ballSpeed + 500);
+        }
+
+        function triggerFlash() {
+          const target = Math.random() > 0.5 ? document.querySelector('#target-left') : document.querySelector('#target-right');
+          if (target.getAttribute('material').opacity > 0) return;
+          target.setAttribute('material', {opacity: 0.7, emissiveIntensity: 1.5});
+          let clicked = false;
+          const handler = () => { if(!clicked) { clicked = true; stats.visionHit++; playSound(440); target.setAttribute('material', {opacity: 0, emissiveIntensity: 0}); updateUI(); target.removeEventListener('mousedown', handler); }};
+          target.addEventListener('mousedown', handler);
+          setTimeout(() => { if (!clicked) { stats.visionMiss++; updateUI(); } target.setAttribute('material', {opacity: 0, emissiveIntensity: 0}); target.removeEventListener('mousedown', handler); }, peripheralTime);
+        }
+
+        setInterval(spawnBall, 1500);
+        setInterval(triggerFlash, 2000);
+        setInterval(() => { if (timeLeft > 0) { timeLeft--; const m = Math.floor(timeLeft / 60), s = timeLeft % 60; document.querySelector('#timer-txt').setAttribute('value', `${m}:${s < 10 ? '0' : ''}${s}`); }}, 1000);
+      </script>
+    </a-scene>
+  </body>
+</html>

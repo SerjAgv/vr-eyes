@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Eye Reaction Training</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #333; /* Запасной фон */
+    }
+
+    .background {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: -1;
+      transition: opacity 2s ease;
+    }
+
+    .tennis-ball {
+      position: absolute;
+      width: 70px;
+      height: 70px;
+      /* Путь к картинке мяча */
+      background-image: url('pdl_court/pngtree-yellow-tennis-ball-bright-sports-equipment-outdoor-gear-isolated-on-a-png-image_12860496.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4em;
+      font-family: Arial, sans-serif;
+      font-weight: bold;
+      color: black;
+      user-select: none;
+      pointer-events: none; /* Чтобы мячи не мешали кликам, если нужно */
+    }
+
+    #startButton {
+      padding: 1em 2em;
+      font-size: 2em;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background-color: white;
+      color: black;
+      z-index: 10;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+
+  <button id="startButton">Старт</button>
+  
+  <div class="background" id="bg1"></div>
+  <div class="background" id="bg2" style="opacity: 0;"></div>
+
+  <script>
+    const backgrounds = [
+      'pdl_court/green1.jpg', 'pdl_court/green2.jpg', 'pdl_court/green3.jpg',
+      'pdl_court/blue1.webp', 'pdl_court/blue2.webp', 'pdl_court/people1.webp'
+      // ... добавьте остальные ваши пути здесь
+    ];
+    
+    let bgIndex = 0;
+    const bg1 = document.getElementById('bg1');
+    const bg2 = document.getElementById('bg2');
+    let showingBg1 = true;
+    let sessionActive = false; // Флаг активности сессии
+
+    function switchBackground() {
+      if (!sessionActive) return;
+      bgIndex = (bgIndex + 1) % backgrounds.length;
+      const nextBg = backgrounds[bgIndex];
+      
+      if (showingBg1) {
+        bg2.style.backgroundImage = `url('${nextBg}')`;
+        bg2.style.opacity = 1;
+        bg1.style.opacity = 0;
+      } else {
+        bg1.style.backgroundImage = `url('${nextBg}')`;
+        bg1.style.opacity = 1;
+        bg2.style.opacity = 0;
+      }
+      showingBg1 = !showingBg1;
+    }
+
+    setInterval(switchBackground, 4500);
+    
+    const startButton = document.getElementById("startButton");
+
+    function getRandomPosition() {
+      const x = Math.random() * (window.innerWidth - 80);
+      const y = Math.random() * (window.innerHeight - 80);
+      return { x, y };
+    }
+
+    // Универсальная функция создания мяча
+    function createBall(content = "") {
+      const div = document.createElement('div');
+      div.className = 'tennis-ball';
+      div.textContent = content;
+      const pos = getRandomPosition();
+      div.style.left = `${pos.x}px`;
+      div.style.top = `${pos.y}px`;
+      document.body.appendChild(div);
+      return div;
+    }
+
+    function startSession() {
+      sessionActive = true;
+      startButton.style.display = "none";
+
+      const sessionDuration = (Math.random() * (320 - 10) + 10) * 1000;
+      const startTime = Date.now();
+
+      // Логика основного мяча с цифрой
+      function showTargetBall() {
+        if (Date.now() - startTime >= sessionDuration) {
+          endGame();
+          return;
+        }
+
+        const number = Math.floor(Math.random() * 9) + 1;
+        const ball = createBall(number);
+
+        setTimeout(() => ball.remove(), 350);
+        setTimeout(showTargetBall, 400); // Появляется каждые 400мс
+      }
+
+      // Логика мячей-пустышек (отвлекающих)
+      function showDecoyBall() {
+        if (!sessionActive) return;
+
+        const ball = createBall(""); // Без цифры
+        // Пустышки могут исчезать чуть быстрее или медленнее для хаоса
+        const lifeTime = Math.random() * (400 - 200) + 200; 
+        
+        setTimeout(() => ball.remove(), lifeTime);
+        
+        // Случайная пауза до появления следующей пустышки (от 100 до 600 мс)
+        setTimeout(showDecoyBall, Math.random() * 500 + 100);
+      }
+
+      function endGame() {
+        sessionActive = false;
+        document.querySelectorAll('.tennis-ball').forEach(b => b.remove());
+        
+        const endMsg = createBall("Конец");
+        endMsg.style.left = "50%";
+        endMsg.style.top = "50%";
+        endMsg.style.transform = "translate(-50%, -50%)";
+      }
+
+      // Запускаем оба потока мячей
+      showTargetBall();
+      showDecoyBall(); // Первый поток пустышек
+      showDecoyBall(); // Второй поток пустышек (для большей плотности)
+    }
+
+    startButton.addEventListener("click", startSession);
+  </script>
+</body>
+</html>

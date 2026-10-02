@@ -1,0 +1,211 @@
+<!--
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Padel Court Background</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-image: url('pdl_court/638486607b8cde34560210a7_private-res-padel-3.jpg'); /* замените на путь к вашему изображению */
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+
+    .overlay {
+      background-color: rgba(0, 0, 0, 0.4); /* затемнение, чтобы текст был читабельным */
+      height: 100%;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      font-size: 3rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <h1>Добро пожаловать на падел корт</h1>
+  </div>
+</body>
+</html>
+-->
+
+<!--
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Padel Court Background with Ball</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-image: url('pdl_court/638486607b8cde34560210a7_private-res-padel-3.jpg'); /* Замените при необходимости */
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        height: 100vh;
+        overflow: hidden;
+        position: relative;
+      }
+      
+      .ball {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        background-image: url('pdl_court/pngtree-yellow-tennis-ball-bright-sports-equipment-outdoor-gear-isolated-on-a-png-image_12860496.png');
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        transition: all 1s ease-in-out;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ball" id="ball"></div>
+    
+    <script>
+      const ball = document.getElementById('ball');
+      const ballSize = 50;
+      
+      let posX = 100;
+      let posY = 100;
+      let velocityX = 1200; // увеличенная скорость по X
+      let velocityY = 900;  // увеличенная скорость по Y
+      
+      function updateBallPosition() {
+        const maxX = window.innerWidth - ballSize;
+        const maxY = window.innerHeight - ballSize;
+        
+        posX += velocityX;
+        posY += velocityY;
+        
+        // Отскок от стен
+        if (posX <= 0 || posX >= maxX) {
+          velocityX *= -1;
+          posX = Math.max(0, Math.min(posX, maxX));
+        }
+        if (posY <= 0 || posY >= maxY) {
+          velocityY *= -1;
+          posY = Math.max(0, Math.min(posY, maxY));
+        }
+        
+        ball.style.left = posX + 'px';
+        ball.style.top = posY + 'px';
+        
+        requestAnimationFrame(updateBallPosition);
+      }
+      
+      updateBallPosition();
+    </script></body>
+
+</html>
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crazy Fast Padel Ball</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-image: url('pdl_court/638486607b8cde34560210a7_private-res-padel-3.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        height: 100vh;
+        overflow: hidden;
+        position: relative;
+      }
+      
+      .ball {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        background-image: url('pdl_court/pngtree-yellow-tennis-ball-bright-sports-equipment-outdoor-gear-isolated-on-a-png-image_12860496.png');
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        top: 100px;
+        left: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ball" id="ball"></div>
+  
+    <script>
+      const ball = document.getElementById('ball');
+      const ballSize = 50;
+      
+      let posX = 100;
+      let posY = 100;
+      
+      let velocityX = getRandomVelocity();
+      let velocityY = getRandomVelocity();
+      
+      function getRandomVelocity() {
+        // от -50 до +50 пикселей за кадр
+        return (Math.random() > 0.5 ? 1 : -1) * (50 + Math.random() * 30);
+      }
+      
+      function applyTurbulence(v) {
+        // Немного хаотичности каждый кадр
+        const variation = (Math.random() - 0.5) * 10;
+        return v + variation;
+      }
+      
+      function updateBallPosition() {
+        const maxX = window.innerWidth - ballSize;
+        const maxY = window.innerHeight - ballSize;
+        
+        velocityX = applyTurbulence(velocityX);
+        velocityY = applyTurbulence(velocityY);
+        
+        posX += velocityX;
+        posY += velocityY;
+        
+        // Отскок и рандом при касании стен
+        if (posX <= 0 || posX >= maxX) {
+          velocityX = getRandomVelocity();
+          posX = Math.max(0, Math.min(posX, maxX));
+        }
+        
+        if (posY <= 0 || posY >= maxY) {
+          velocityY = getRandomVelocity();
+          posY = Math.max(0, Math.min(posY, maxY));
+        }
+        
+        ball.style.left = posX + 'px';
+        ball.style.top = posY + 'px';
+        
+        // Мелкий поворот для визуального безумия
+        const angle = Math.random() * 360;
+        ball.style.transform = `rotate(${angle}deg)`;
+        
+        requestAnimationFrame(updateBallPosition);
+      }
+      
+      updateBallPosition();
+    </script>
+  
+  </body>
+</html>

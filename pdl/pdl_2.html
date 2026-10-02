@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel Eye Trainer VR</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene>
+      <a-sky color="#222"></a-sky>
+      <a-plane position="0 0 -4" rotation="-90 0 0" width="10" height="20" color="#1a472a"></a-plane>
+
+      <a-entity id="rig" position="0 1.6 0">
+        <a-camera>
+          <a-cursor fuse="true" fuse-timeout="100" color="yellow"></a-cursor>
+        </a-camera>
+      </a-entity>
+
+      <a-text id="score" value="Hits: 0" position="-1 2.5 -3" color="white"></a-text>
+
+      <script>
+        let score = 0;
+        const scene = document.querySelector('a-scene');
+        const scoreDisplay = document.querySelector('#score');
+
+        function spawnBall() {
+          const ball = document.createElement('a-sphere');
+          ball.setAttribute('radius', '0.15');
+          ball.setAttribute('color', '#ccff00'); // Цвет мяча для падела
+          
+          // Начальная позиция (впереди на расстоянии 10 метров)
+          const startX = (Math.random() - 0.5) * 6;
+          const startY = 0.5 + Math.random() * 2;
+          ball.setAttribute('position', `${startX} ${startY} -10`);
+
+          // Анимация полета на игрока
+          const duration = 1500 + Math.random() * 2000; // Скорость вылета
+          ball.setAttribute('animation', {
+            property: 'position',
+            to: `${(Math.random() - 0.5) * 2} ${1.6} 2`,
+            dur: duration,
+            easing: 'linear'
+          });
+
+          // Событие при наведении взгляда (хит)
+          ball.addEventListener('mouseenter', () => {
+            score++;
+            scoreDisplay.setAttribute('value', `Hits: ${score}`);
+            ball.setAttribute('color', 'red');
+            setTimeout(() => ball.remove(), 100);
+          });
+
+          // Удаление мяча, если пролетел мимо
+          setTimeout(() => {
+            if (ball.parentNode) ball.remove();
+          }, duration);
+
+          scene.appendChild(ball);
+        }
+
+        // Интервал вылета мячей (каждые 1.5 секунды)
+        setInterval(spawnBall, 500);
+      </script>
+    </a-scene>
+  </body>
+</html>

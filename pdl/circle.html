@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>VR Vision Trainer PRO</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+</head>
+<body style="background-color: #000;">
+    <script>
+        AFRAME.registerComponent('game-logic', {
+            init: function () {
+                this.stats = {
+                    level: 1,
+                    correct: 0,
+                    exposure: 300,        // СТАРТ: 300мс
+                    startSymbols: 5,      // СТАРТ: 5 символов
+                    baseRadius: 1.5,      // СТАРТ: 1.5 метра
+                    startTime: null,
+                    duration: 5 * 60 * 1000, 
+                    isFinished: false
+                };
+
+                this.isPlaying = false;
+                this.centerC = document.querySelector('#center-target');
+                this.startBtn = document.querySelector('#start-btn');
+                this.infoText = document.querySelector('#info-text');
+                this.statsDisplay = document.querySelector('#stats-display');
+                this.container = document.querySelector('#peripheral-container');
+
+                this.startBtn.addEventListener('mousedown', () => {
+                    if (this.stats.isFinished) {
+                        location.reload(); 
+                        return;
+                    }
+                    if (!this.stats.startTime) {
+                        this.stats.startTime = Date.now();
+                        this.startTimer();
+                    }
+                    this.startRound();
+                });
+            },
+
+            startTimer: function() {
+                const timerInterval = setInterval(() => {
+                    const elapsed = Date.now() - this.stats.startTime;
+                    if (elapsed >= this.stats.duration) {
+                        clearInterval(timerInterval);
+                        this.showFinalStats();
+                    }
+                }, 1000);
+            },
+
+            startRound: function() {
+                if (this.stats.isFinished) return;
+
+                this.isPlaying = true;
+                this.startBtn.setAttribute('visible', false);
+                this.startBtn.setAttribute('scale', '0.001 0.001 0.001');
+                this.container.innerHTML = ''; 
+                
+                // Актуальные параметры раунда
+                const currentSymbols = Math.min(12, this.stats.startSymbols + (this.stats.level - 1));
+                const currentRadius = Math.min(4.5, this.stats.baseRadius + (this.stats.level * 0.20));
+
+                this.infoText.setAttribute('value', `LEVEL: ${this.stats.level}\nSPEED: ${this.stats.exposure}ms | RADIUS: ${currentRadius.toFixed(2)}m`);
+                this.infoText.setAttribute('color', 'white');
+
+                const orientations = [0, 90, 180, 270];
+                const targetOri = orientations[Math.floor(Math.random() * orientations.length)];
+                this.centerC.setAttribute('rotation', `0 0 ${targetOri}`);
+
+                // Показ стимула
+                setTimeout(() => {
+                    this.centerC.setAttribute('visible', true);
+                    setTimeout(() => {
+                        this.centerC.setAttribute('visible', false);
+                        this.spawnTargets(targetOri, currentSymbols, currentRadius);
+                    }, this.stats.exposure);
+                }, 1000);
+            },
+
+            spawnTargets: function(correctOri, count, radius) {
+                const correctIndex = Math.floor(Math.random() * count);
+
+                for (let i = 0; i < count; i++) {
+                    const angle = (i * Math.PI * 2) / count;
+                    const x = Math.cos(angle) * radius;
+                    const y = Math.sin(angle) * radius;
+
+                    const wrapper = document.createElement('a-entity');
+                    wrapper.setAttribute('position', `${x} ${y + 1.6} -3.5`);
+                    wrapper.setAttribute('class', 'clickable');
+                    wrapper.setAttribute('geometry', 'primitive: circle; radius: 0.5');
+                    wrapper.setAttribute('material', 'visible: false; opacity: 0');
+
+                    const isCorrect = (i === correctIndex);
+                    let rotation;
+                    if (isCorrect) {
+                        rotation = correctOri;
+                    } else {
+                        const variants = [0, 90, 180, 270].filter(o => o !== correctOri);
+                        rotation = variants[Math.floor(Math.random() * variants.length)];
+                    }
+
+                    const ring = document.createElement('a-entity');
+                    ring.setAttribute('geometry', 'primitive: ring; radiusInner: 0.15; radiusOuter: 0.2; thetaStart: 45; thetaLength: 270');
+                    ring.setAttribute('material', 'color: white; shader: flat; side: double');
+                    ring.setAttribute('rotation', `0 0 ${rotation}`);
+                    
+                    wrapper.appendChild(ring);
+                    wrapper.addEventListener('mouseenter', () => ring.setAttribute('material', 'color: #FFFF00'));
+                    wrapper.addEventListener('mouseleave', () => ring.setAttribute('material', 'color: white'));
+                    wrapper.addEventListener('mousedown', () => {
+                        if (this.isPlaying) this.handleChoice(isCorrect);
+                    });
+
+                    this.container.appendChild(wrapper);
+                }
+            },
+
+            handleChoice: function(win) {
+                this.isPlaying = false;
+                if (win) {
+                    this.stats.correct++;
+                    this.stats.level++;
+                    this.stats.exposure = Math.max(100, this.stats.exposure - 15);
+                    this.infoText.setAttribute('value', 'CORRECT!');
+                    this.infoText.setAttribute('color', '#00FF00');
+                } else {
+                    this.stats.level = Math.max(1, this.stats.level - 1);
+                    this.stats.exposure = Math.min(600, this.stats.exposure + 30);
+                    this.infoText.setAttribute('value', 'WRONG - LEVEL DOWN');
+                    this.infoText.setAttribute('color', '#FF4444');
+                }
+
+                setTimeout(() => {
+                    if (!this.stats.isFinished) {
+                        this.startBtn.setAttribute('visible', true);
+                        this.startBtn.setAttribute('scale', '1 1 1');
+                        this.infoText.setAttribute('color', 'white');
+                    }
+                }, 1200);
+            },
+
+            showFinalStats: function() {
+                this.stats.isFinished = true;
+                this.isPlaying = false;
+                this.container.innerHTML = '';
+                const finalMsg = `SESSION ENDED\n\nLevel Reached: ${this.stats.level}\nTotal Correct: ${this.stats.correct}\nFinal Speed: ${this.stats.exposure}ms`;
+                this.statsDisplay.setAttribute('value', finalMsg);
+                this.statsDisplay.setAttribute('visible', true);
+                this.infoText.setAttribute('value', 'DONE');
+                this.startBtn.setAttribute('visible', true);
+                this.startBtn.setAttribute('scale', '1 1 1');
+                this.startBtn.querySelector('a-text').setAttribute('value', 'RESTART');
+            }
+        });
+    </script>
+
+    <a-scene game-logic raycaster="objects: .clickable; interval: 100">
+        <a-sky color="#050505"></a-sky>
+
+        <a-entity id="rig">
+            <a-camera position="0 1.6 0">
+                <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable"></a-entity>
+            </a-camera>
+            <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 20"></a-entity>
+            <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 20"></a-entity>
+        </a-entity>
+
+        <a-text id="info-text" value="VR VISION TRAINER" position="0 2.8 -3.5" align="center" width="6"></a-text>
+        <a-text id="stats-display" value="" position="0 1.6 -3" align="center" width="4" color="#00AAFF" visible="false"></a-text>
+
+        <a-entity id="start-btn" class="clickable" geometry="primitive: plane; width: 1.6; height: 0.6" material="color: #333" position="0 1.0 -2.5">
+            <a-text value="START SESSION" align="center" width="4.5" position="0 0 0.05"></a-text>
+        </a-entity>
+
+        <a-entity id="center-target" 
+                  geometry="primitive: ring; radiusInner: 0.15; radiusOuter: 0.2; thetaStart: 45; thetaLength: 270"
+                  material="color: #00ccff; shader: flat; side: double"
+                  position="0 1.6 -3.5" visible="false">
+        </a-entity>
+
+        <a-entity id="peripheral-container"></a-entity>
+    </a-scene>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Padel VR - Stable Version</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; color: white; font-family: sans-serif; }
+        #debug { position: absolute; top: 10px; left: 10px; z-index: 100; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="debug">Инициализация...</div>
+
+    <script src="https://cdn.jsdelivr.net/gh/kripken/ammo.js@master/builds/ammo.js"></script>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+        import { VRButton } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/webxr/VRButton.js';
+
+        let physicsWorld, scene, camera, renderer, clock, launcher;
+        let balls = [], tmpTrans;
+        const debugEl = document.getElementById('debug');
+
+        // Проверка загрузки Ammo
+        if (typeof Ammo !== 'undefined') {
+            Ammo().then((lib) => {
+                window.Ammo = lib;
+                tmpTrans = new Ammo.btTransform();
+                debugEl.innerText = "Ammo загружен. Нажми ENTER VR";
+                init();
+            });
+        } else {
+            debugEl.innerText = "Ошибка: Ammo не загрузился!";
+        }
+
+        function init() {
+            // 1. Сцена и камера
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb); // Небо
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 1.6, 5); // Позиция игрока
+
+            // 2. Рендерер
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Кнопка VR
+            document.body.appendChild(VRButton.createButton(renderer));
+
+            // 3. Свет
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+            scene.add(hemiLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(5, 10, 5);
+            scene.add(dirLight);
+
+            // 4. Физика
+            const colConfig = new Ammo.btDefaultCollisionConfiguration();
+            const disp = new Ammo.btCollisionDispatcher(colConfig);
+            const cache = new Ammo.btDbvtBroadphase();
+            const solv = new Ammo.btSequentialImpulseConstraintSolver();
+            physicsWorld = new Ammo.btDiscreteDynamicsWorld(disp, cache, solv, colConfig);
+            physicsWorld.setGravity(new Ammo.btVector3(0, -9.81, 0));
+
+            // 5. Окружение (Корт)
+            createStaticBox(new THREE.Vector3(0, -0.1, 0), new THREE.Vector3(10, 0.2, 20), 0.6, 0.7, 0x2e7d32); // Пол
+            createStaticBox(new THREE.Vector3(0, 1.5, -10), new THREE.Vector3(10, 3, 0.1), 0.1, 0.9, 0xadd8e6, 0.5); // Стекло
+
+            launcher = {
+                timer: 0,
+                update: function(delta) {
+                    this.timer += delta;
+                    if (this.timer > 2.5) {
+                        fireBall();
+                        this.timer = 0;
+                    }
+                }
+            };
+
+            clock = new THREE.Clock();
+            renderer.setAnimationLoop(render);
+        }
+
+        function createStaticBox(pos, size, friction, rest, color, op = 1) {
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(size.x, size.y, size.z),
+                new THREE.MeshStandardMaterial({ color, transparent: op < 1, opacity: op })
+            );
+            mesh.position.copy(pos);
+            scene.add(mesh);
+
+            const t = new Ammo.btTransform();
+            t.setIdentity();
+            t.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z));
+            const shape = new Ammo.btBoxShape(new Ammo.btVector3(size.x/2, size.y/2, size.z/2));
+            const body = new Ammo.btRigidBody(new Ammo.btRigidBodyConstructionInfo(0, new Ammo.btDefaultMotionState(t), shape, new Ammo.btVector3(0,0,0)));
+            body.setFriction(friction);
+            body.setRestitution(rest);
+            physicsWorld.addRigidBody(body);
+        }
+
+        function fireBall() {
+            const radius = 0.06;
+            const ball = new THREE.Mesh(
+                new THREE.SphereGeometry(radius, 16, 16),
+                new THREE.MeshStandardMaterial({ color: 0xccff00 })
+            );
+            scene.add(ball);
+
+            const t = new Ammo.btTransform();
+            t.setIdentity();
+            t.setOrigin(new Ammo.btVector3((Math.random()-0.5)*4, 1.5, -9)); // Летит на тебя
+
+            const shape = new Ammo.btSphereShape(radius);
+            const localInertia = new Ammo.btVector3(0, 0, 0);
+            shape.calculateLocalInertia(0.058, localInertia);
+
+            const body = new Ammo.btRigidBody(new Ammo.btRigidBodyConstructionInfo(0.058, new Ammo.btDefaultMotionState(t), shape, localInertia));
+            body.setRestitution(0.9);
+            body.applyCentralImpulse(new Ammo.btVector3(0, 5, 12)); // Импульс вперед (Z+)
+            
+            physicsWorld.addRigidBody(body);
+            ball.userData.physicsBody = body;
+            balls.push(ball);
+        }
+
+        function render() {
+            const delta = clock.getDelta();
+            
+            if (physicsWorld) {
+                physicsWorld.stepSimulation(delta, 10);
+                launcher.update(delta);
+
+                balls.forEach((b, index) => {
+                    const body = b.userData.physicsBody;
+                    const ms = body.getMotionState();
+                    if (ms) {
+                        ms.getWorldTransform(tmpTrans);
+                        const p = tmpTrans.getOrigin();
+                        b.position.set(p.x(), p.y(), p.z());
+                        
+                        // Удаление улетевших мячей
+                        if (p.z() > 15) {
+                            scene.remove(b);
+                            physicsWorld.removeRigidBody(body);
+                            balls.splice(index, 1);
+                        }
+                    }
+                });
+            }
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi Crazy Balls</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-image: url('pdl_court/638486607b8cde34560210a7_private-res-padel-3.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .ball {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      background-image: url('pdl_court/pngtree-yellow-tennis-ball-bright-sports-equipment-outdoor-gear-isolated-on-a-png-image_12860496.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
+    #addBallBtn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: rgba(255,255,255,0.8);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <button id="addBallBtn">Добавить мяч</button>
+
+  <script>
+    const ballSize = 50;
+    const balls = [];
+
+    function getRandomVelocity() {
+      return (Math.random() > 0.5 ? 1 : -1) * (20 + Math.random() * 30);
+    }
+
+    function applyTurbulence(v) {
+      const variation = (Math.random() - 0.5) * 10;
+      return v + variation;
+    }
+
+    function createBall() {
+      const ball = document.createElement('div');
+      ball.classList.add('ball');
+      document.body.appendChild(ball);
+
+      const posX = Math.random() * (window.innerWidth - ballSize);
+      const posY = Math.random() * (window.innerHeight - ballSize);
+      const velocityX = getRandomVelocity();
+      const velocityY = getRandomVelocity();
+
+      balls.push({ el: ball, posX, posY, velocityX, velocityY });
+    }
+
+    function updateBalls() {
+      const maxX = window.innerWidth - ballSize;
+      const maxY = window.innerHeight - ballSize;
+
+      balls.forEach(ball => {
+        ball.velocityX = applyTurbulence(ball.velocityX);
+        ball.velocityY = applyTurbulence(ball.velocityY);
+
+        ball.posX += ball.velocityX;
+        ball.posY += ball.velocityY;
+
+        if (ball.posX <= 0 || ball.posX >= maxX) {
+          ball.velocityX = getRandomVelocity();
+          ball.posX = Math.max(0, Math.min(ball.posX, maxX));
+        }
+
+        if (ball.posY <= 0 || ball.posY >= maxY) {
+          ball.velocityY = getRandomVelocity();
+          ball.posY = Math.max(0, Math.min(ball.posY, maxY));
+        }
+
+        const angle = Math.random() * 360;
+        ball.el.style.left = ball.posX + 'px';
+        ball.el.style.top = ball.posY + 'px';
+        ball.el.style.transform = `rotate(${angle}deg)`;
+      });
+
+      requestAnimationFrame(updateBalls);
+    }
+
+    // Добавить мяч при клике на кнопку
+    document.getElementById('addBallBtn').addEventListener('click', createBall);
+
+    // Создаём начальный мяч и запускаем анимацию
+    createBall();
+    updateBalls();
+  </script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel Peripheral Vision Pro v2.0</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene shadow="type: pcfsoft" cursor="rayOrigin: mouse">
+      
+      <a-assets>
+        <img id="grid" src="https://img.freepik.com/free-vector/black-metal-wire-mesh-pattern-background_1017-26330.jpg">
+      </a-assets>
+
+      <a-sky color="#050505"></a-sky>
+      <a-light type="ambient" intensity="0.4"></a-light>
+      <a-light type="directional" position="2 4 -3" intensity="0.8" castShadow="true"></a-light>
+
+      <a-plane position="0 0 -5" rotation="-90 0 0" width="10" height="20" color="#1a472a" shadow></a-plane>
+      <a-plane position="0 0.02 -5" rotation="-90 0 0" width="0.1" height="20" color="white"></a-plane> 
+      
+      <a-box id="wall-back" position="0 1.5 -10" width="10" height="3" depth="0.1" color="#88ccff" opacity="0.2" transparent="true"></a-box>
+      <a-box id="wall-left" position="-5 1.5 -7.5" width="0.1" height="3" depth="5" color="#88ccff" opacity="0.2" transparent="true"></a-box>
+      <a-box id="wall-right" position="5 1.5 -7.5" width="0.1" height="3" depth="5" color="#88ccff" opacity="0.2" transparent="true"></a-box>
+      
+      <a-plane position="-5 1.5 -2.5" rotation="0 90 0" width="5" height="3" src="#grid" repeat="5 3" opacity="0.6"></a-plane>
+      <a-plane position="5 1.5 -2.5" rotation="0 -90 0" width="5" height="3" src="#grid" repeat="5 3" opacity="0.6"></a-plane>
+
+      <a-box id="target-left" class="clickable" position="-4.8 1.5 -4" width="0.2" height="2" depth="1" color="#ff0000" visible="false" emissive="#ff0000" emissiveIntensity="1"></a-box>
+      <a-box id="target-right" class="clickable" position="4.8 1.5 -4" width="0.2" height="2" depth="1" color="#ff0000" visible="false" emissive="#ff0000" emissiveIntensity="1"></a-box>
+
+      <a-entity id="rig">
+        <a-camera look-controls wasd-controls-enabled="false">
+          <a-cursor fuse="false" raycaster="objects: .ball" color="yellow" scale="0.5 0.5 0.5"></a-cursor>
+          
+          <a-entity position="0 1.2 -2.5">
+            <a-text id="level-txt" value="LEVEL: 1" align="center" color="#00fff2" width="4" position="0 0.4 0"></a-text>
+            <a-text id="stats-txt" value="Hits: 0 | Time: 15:00" align="center" color="white" width="3" position="0 0.2 0"></a-text>
+          </a-entity>
+        </a-camera>
+
+        <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 10; interval: 50"></a-entity>
+        <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 10; interval: 50"></a-entity>
+      </a-entity>
+
+      <script>
+        // ИГРОВЫЕ ПЕРЕМЕННЫЕ
+        let score = 0;
+        let level = 1;
+        let ballSpeed = 2000; 
+        let peripheralTime = 1200; 
+        let timeLeft = 15 * 60; 
+
+        const scene = document.querySelector('a-scene');
+        const levelTxt = document.querySelector('#level-txt');
+        const statsTxt = document.querySelector('#stats-txt');
+        const targetLeft = document.querySelector('#target-left');
+        const targetRight = document.querySelector('#target-right');
+
+        // ТАЙМЕР
+        const timerInterval = setInterval(() => {
+          timeLeft--;
+          const m = Math.floor(timeLeft / 60);
+          const s = timeLeft % 60;
+          updateStatsText(m, s);
+
+          if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            clearInterval(ballLoop);
+            clearInterval(periphLoop);
+            levelTxt.setAttribute('value', "TRAINING DONE!");
+            levelTxt.setAttribute('color', "#00ff00");
+          }
+        }, 1000);
+
+        function updateStatsText(m, s) {
+            const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
+            statsTxt.setAttribute('value', `Hits: ${score} | Time: ${timeStr}`);
+        }
+
+        // ПРОГРЕССИЯ СЛОЖНОСТИ
+        function onHit() {
+            score++;
+            if (score % 7 === 0 && level < 10) {
+                level++;
+                ballSpeed = Math.max(800, ballSpeed - 150);
+                peripheralTime = Math.max(500, peripheralTime - 100);
+                levelTxt.setAttribute('value', `LEVEL: ${level}`);
+                levelTxt.setAttribute('color', "#ff00ee");
+                setTimeout(() => levelTxt.setAttribute('color', "#00fff2"), 400);
+            }
+        }
+
+        // СПАВН МЯЧА (Центральная задача)
+        function spawnBall() {
+          const ball = document.createElement('a-sphere');
+          ball.setAttribute('class', 'ball');
+          ball.setAttribute('radius', '0.12');
+          ball.setAttribute('color', '#ccff00');
+          ball.setAttribute('shadow', '');
+          
+          // Выбор траектории (прямой или угловой)
+          const isCorner = Math.random() > 0.4;
+          const side = Math.random() > 0.5 ? 1 : -1;
+          
+          const startPos = { x: 0, y: 1.5, z: -2 };
+          const p1 = isCorner ? { x: 4.9 * side, y: 0.8, z: -8 } : { x: 0, y: 0.1, z: -7 };
+          const p2 = { x: (isCorner ? 3 * side : 0), y: 1, z: -9.9 };
+          const p3 = { x: (Math.random()-0.5)*4, y: 1.2, z: 2 };
+
+          ball.setAttribute('position', `${startPos.x} ${startPos.y} ${startPos.z}`);
+
+          // Цепочка анимаций
+          ball.setAttribute('animation__1', { property: 'position', to: `${p1.x} ${p1.y} ${p1.z}`, dur: ballSpeed * 0.3, easing: 'linear' });
+          ball.setAttribute('animation__2', { property: 'position', from: `${p1.x} ${p1.y} ${p1.z}`, to: `${p2.x} ${p2.y} ${p2.z}`, dur: ballSpeed * 0.2, delay: ballSpeed * 0.3, easing: 'linear' });
+          ball.setAttribute('animation__3', { property: 'position', from: `${p2.x} ${p2.y} ${p2.z}`, to: `${p3.x} ${p3.y} ${p3.z}`, dur: ballSpeed * 0.5, delay: ballSpeed * 0.5, easing: 'linear' });
+
+          ball.addEventListener('mouseenter', () => {
+            onHit();
+            ball.remove();
+          });
+
+          scene.appendChild(ball);
+          setTimeout(() => { if(ball.parentNode) ball.remove(); }, ballSpeed + 1000);
+        }
+
+        // ПЕРИФЕРИЯ (Боковая задача)
+        function triggerPeripheral() {
+          const target = Math.random() > 0.5 ? targetLeft : targetRight;
+          if (target.getAttribute('visible') === 'false') {
+            target.setAttribute('visible', 'true');
+            setTimeout(() => target.setAttribute('visible', 'false'), peripheralTime);
+          }
+        }
+
+        // Слушатель для кликов по периферии (контроллеры и мышь)
+        document.querySelectorAll('.clickable').forEach(el => {
+            el.addEventListener('mousedown', function() {
+                if (this.getAttribute('visible') === 'true') {
+                    onHit();
+                    this.setAttribute('visible', 'false');
+                    // Вспышка подтверждения
+                    this.setAttribute('color', '#00ff00');
+                    setTimeout(() => this.setAttribute('color', '#ff0000'), 200);
+                }
+            });
+        });
+
+        // ЦИКЛЫ
+        const ballLoop = setInterval(spawnBall, 2500);
+        const periphLoop = setInterval(triggerPeripheral, 4500);
+
+      </script>
+    </a-scene>
+  </body>
+</html>

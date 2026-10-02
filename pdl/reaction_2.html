@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Padel VR - High Speed Pro</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+</head>
+<body>
+
+    <script>
+        // ГЛОБАЛЬНЫЕ НАСТРОЙКИ
+        const GAME = {
+            level: 1,
+            state: 'IDLE', 
+            balls: [],
+            targetEl: null,
+            duration: 30000,
+            // СКОРОСТЬ УВЕЛИЧЕНА: была 0.05, стала 0.1
+            baseSpeed: 0.1 
+        };
+
+        // КОМПОНЕНТ ФИЗИКИ И ВРАЩЕНИЯ
+        AFRAME.registerComponent('ball-physics', {
+            schema: { speed: {type: 'number', default: 0.1} },
+            init: function () {
+                // Вектор скорости
+                this.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * this.data.speed,
+                    (Math.random() - 0.5) * this.data.speed,
+                    (Math.random() - 0.5) * this.data.speed
+                );
+                // Вектор вращения (для реализма)
+                this.rotVel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 10,
+                    (Math.random() - 0.5) * 10,
+                    (Math.random() - 0.5) * 10
+                );
+                // Границы корта
+                this.bounds = { x: 4, y: [0.3, 4], z: [-8, -1.8] };
+            },
+            tick: function (t, dt) {
+                if (GAME.state !== 'MOVING') return;
+
+                const pos = this.el.object3D.position;
+                pos.x += this.velocity.x;
+                pos.y += this.velocity.y;
+                pos.z += this.velocity.z;
+
+                // Отскоки от стен, пола и потолка
+                if (Math.abs(pos.x) > this.bounds.x) this.velocity.x *= -1;
+                if (pos.y < this.bounds.y[0] || pos.y > this.bounds.y[1]) this.velocity.y *= -1;
+                if (pos.z < this.bounds.z[0] || pos.z > this.bounds.z[1]) this.velocity.z *= -1;
+
+                // Вращение сферы
+                this.el.object3D.rotation.x += this.rotVel.x * (dt/1000);
+                this.el.object3D.rotation.y += this.rotVel.y * (dt/1000);
+                this.el.object3D.rotation.z += this.rotVel.z * (dt/1000);
+            }
+        });
+    </script>
+
+    <a-scene id="scene" raycaster="objects: .raycastable" renderer="antialias: true; colorManagement: true;">
+        
+        <a-assets>
+            <img id="feltDiffuse" src="https://cdn.pixabay.com/photo/2015/07/28/14/15/texture-864357_1280.jpg">
+            <img id="bgImg" src="pdl_court/green1.jpg">
+        </a-assets>
+
+        <a-sky src="#bgImg" rotation="0 -90 0"></a-sky>
+
+        <a-entity light="type: hemisphere; color: #ffffff; groundColor: #444444; intensity: 1.5"></a-entity>
+        <a-entity light="type: directional; intensity: 0.6" position="1 4 1"></a-entity>
+
+        <a-entity id="rig">
+            <a-camera position="0 1.6 0"></a-camera>
+            <a-entity laser-controls="hand: left" raycaster="objects: .raycastable; far: 50"></a-entity>
+            <a-entity laser-controls="hand: right" raycaster="objects: .raycastable; far: 50"></a-entity>
+        </a-entity>
+
+        <a-text id="timerUI" value="" color="#dfff4e" align="center" position="0 3.2 -3" width="8"></a-text>
+
+        <a-entity id="menu" position="0 1.6 -2.5">
+            <a-plane color="#111" width="2.8" height="1.8" opacity="0.95"></a-plane>
+            <a-text id="lvlUI" value="LEVEL: 1" color="#dfff4e" align="center" position="0 0.6 0.01" width="5"></a-text>
+            <a-text id="statusUI" value="ГОТОВ?" color="white" align="center" position="0 0.1 0.01" width="4"></a-text>
+            
+            <a-entity id="startBtn" class="raycastable"
+                      position="0 -0.4 0.05" 
+                      geometry="primitive: plane; width: 0.8; height: 0.3" 
+                      material="color: #444"
+                      animation__mouseenter="property: material.color; to: #dffb4e; dur: 200; startEvents: mouseenter"
+                      animation__mouseleave="property: material.color; to: #444; dur: 200; startEvents: mouseleave">
+                <a-text id="btnText" value="START" align="center" color="white" width="4" position="0 0 0.01"></a-text>
+            </a-entity>
+        </a-entity>
+
+        <a-sphere id="flash" radius="30" side="double" opacity="0" material="transparent: true; shader: flat" visible="false"></a-sphere>
+
+    </a-scene>
+
+    <script>
+        const scene = document.querySelector('#scene');
+        const startBtn = document.querySelector('#startBtn');
+        const timerUI = document.querySelector('#timerUI');
+
+        function createBall() {
+            const ball = document.createElement('a-sphere');
+            ball.setAttribute('radius', '0.19');
+            ball.setAttribute('position', `${(Math.random()-0.5)*5} ${1.5+Math.random()} ${-3-Math.random()*3}`);
+            
+            // ФИЗИЧЕСКИ КОРРЕКТНЫЙ МАТЕРИАЛ (PBR)
+            ball.setAttribute('material', {
+                src: '#feltDiffuse',
+                color: '#ccff33', // Optic Yellow
+                shader: 'standard',
+                roughness: 1.0,   // Матовый (ткань)
+                metalness: 0,
+                emissive: '#ccff33', // Легкое свечение против теней
+                emissiveIntensity: 0.15
+            });
+            
+            // Применяем повышенную скорость
+            const currentSpeed = GAME.baseSpeed + (GAME.level * 0.02);
+            ball.setAttribute('ball-physics', { speed: currentSpeed });
+
+            ball.addEventListener('click', () => {
+                if (GAME.state === 'GUESSING') handleResult(ball);
+            });
+
+            scene.appendChild(ball);
+            GAME.balls.push(ball);
+        }
+
+        async function initRound() {
+            if (GAME.state !== 'IDLE') return;
+            
+            GAME.balls.forEach(b => b.remove());
+            GAME.balls = [];
+            document.querySelector('#menu').setAttribute('visible', false);
+            startBtn.classList.remove('raycastable');
+
+            for (let i = 0; i < 6; i++) createBall();
+            
+            GAME.targetEl = GAME.balls[Math.floor(Math.random() * GAME.balls.length)];
+            GAME.targetEl.setAttribute('material', 'color', '#ff3333');
+            GAME.targetEl.setAttribute('material', 'emissive', '#ff3333');
+            
+            GAME.state = 'PREVIEW';
+            await new Promise(r => setTimeout(r, 2000));
+            
+            GAME.targetEl.setAttribute('material', 'color', '#ccff33');
+            GAME.targetEl.setAttribute('material', 'emissive', '#ccff33');
+            
+            GAME.state = 'MOVING';
+            let timeLeft = 30;
+            const timer = setInterval(() => {
+                timeLeft--;
+                timerUI.setAttribute('value', timeLeft);
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    stopMoving();
+                }
+            }, 1000);
+        }
+
+        function stopMoving() {
+            GAME.state = 'GUESSING';
+            timerUI.setAttribute('value', 'ГДЕ МЯЧ?');
+            GAME.balls.forEach(b => b.classList.add('raycastable'));
+        }
+
+        function handleResult(clicked) {
+            GAME.state = 'IDLE';
+            GAME.balls.forEach(b => b.classList.remove('raycastable'));
+            
+            const isWin = clicked === GAME.targetEl;
+            
+            if (isWin) {
+                clicked.setAttribute('material', 'color', '#00ff00');
+                clicked.setAttribute('material', 'emissive', '#00ff00');
+                document.querySelector('#statusUI').setAttribute('value', 'ВЕРНО!');
+                GAME.level++;
+                document.querySelector('#btnText').setAttribute('value', 'NEXT LEVEL');
+                doFlash("#00ff00");
+            } else {
+                clicked.setAttribute('material', 'color', '#ff0000');
+                clicked.setAttribute('material', 'emissive', '#ff0000');
+                GAME.targetEl.setAttribute('material', 'color', '#00ff00');
+                GAME.targetEl.setAttribute('material', 'emissive', '#00ff00');
+                document.querySelector('#statusUI').setAttribute('value', 'ОШИБКА!');
+                GAME.level = 1;
+                document.querySelector('#btnText').setAttribute('value', 'RESTART');
+                doFlash("#ff0000");
+            }
+
+            document.querySelector('#menu').setAttribute('visible', true);
+            document.querySelector('#lvlUI').setAttribute('value', 'LEVEL: ' + GAME.level);
+            startBtn.classList.add('raycastable');
+            timerUI.setAttribute('value', '');
+        }
+
+        function doFlash(color) {
+            const f = document.querySelector('#flash');
+            f.setAttribute('visible', true);
+            f.setAttribute('material', 'color', color);
+            f.setAttribute('opacity', 0.2);
+            setTimeout(() => { f.setAttribute('opacity', 0); f.setAttribute('visible', false); }, 200);
+        }
+
+        startBtn.addEventListener('click', initRound);
+    </script>
+</body>
+</html>

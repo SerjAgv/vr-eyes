@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Padel Chaos Zone</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+      position: relative;
+    }
+
+    .background {
+      position: absolute;
+      background-image: url('pdl_court/638486607b8cde34560210a7_private-res-padel-3.jpg');
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: -1;
+      transition: opacity 2s ease;
+      filter:blur(1px);
+    }
+
+    .ball {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      background-image: url('pdl_court/pngtree-yellow-tennis-ball-bright-sports-equipment-outdoor-gear-isolated-on-a-png-image_12860496.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      transition: transform 0.05s linear;
+    }
+
+    #addBallBtn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: rgba(255,255,255,0.8);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      display: none;
+    }
+    
+    #speedControl {
+      position: absolute;
+      top: 20px;
+      left: 150px;
+      z-index: 10;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 10px;
+    }
+    
+    
+    #speedSlider {
+      position: absolute;
+      top: 70px;
+      left: 20px;
+      width: 200px;
+      z-index: 10;
+      display: none;
+    }
+    
+    #speedLabel {
+      position: absolute;
+      top: 45px;
+      left: 20px;
+      color: white;
+      font-weight: bold;
+      z-index: 10;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="background" id="bg1"></div>
+  <div class="background" id="bg2" style="opacity: 0;"></div>
+ <button id="addBallBtn"></button>
+  
+  <!-- 
+  <select id="speedControl">
+    <option value="slow">Медленно</option>
+    <option value="fast" selected>Быстро</option>
+    <option value="crazy">Сумасшедше</option>
+  </select>
+  -->
+  <label id="speedLabel" for="speedSlider"></label> 
+  <input type="range" id="speedSlider" min="0" max="100" value="50">
+  
+  
+
+  <script>
+    // ФОНОВЫЕ ИЗОБРАЖЕНИЯ
+    const backgrounds = [
+      'pdl_court/green1.jpg',
+      'pdl_court/green2.jpg',
+      'pdl_court/green3.jpg',
+      'pdl_court/green4.jpg',
+      'pdl_court/green5.jpg',
+      'pdl_court/green6.jpg',
+      'pdl_court/green7.jpg',
+      'pdl_court/green8.jpg',
+      'pdl_court/green9.jpg',
+      'pdl_court/green10.jpg',
+      'pdl_court/green11.jpg',
+      'pdl_court/green12.jpg',
+      'pdl_court/green13.jpg',
+      'pdl_court/green14.jpg',
+      'pdl_court/green15.png',
+      'pdl_court/green16.jpg',
+      'pdl_court/green17.jpg',
+      'pdl_court/green18.jpg',
+      'pdl_court/green19.jpg',
+      'pdl_court/green20.jpg',
+      'pdl_court/green21.jpg',
+      'pdl_court/green22.jpg',
+      'pdl_court/green23.jpg',
+      'pdl_court/green24.jpg',
+      'pdl_court/green25.jpg',
+      'pdl_court/blue1.webp',
+      'pdl_court/blue2.webp',
+      'pdl_court/blue3.jpeg',
+      'pdl_court/blue3.webp',
+      'pdl_court/blue4.webp',
+      'pdl_court/blue5.webp',
+      'pdl_court/blue6.webp',
+      'pdl_court/blue7.webp',
+      'pdl_court/blue8.jpeg',
+      'pdl_court/people1.webp',
+      'pdl_court/people2.webp'
+
+
+
+    ];
+    
+    
+
+    let bgIndex = 0;
+    const bg1 = document.getElementById('bg1');
+    const bg2 = document.getElementById('bg2');
+    let showingBg1 = true;
+
+    function switchBackground() {
+      bgIndex = (bgIndex + 1) % backgrounds.length;
+      const nextBg = backgrounds[bgIndex];
+
+      if (showingBg1) {
+        bg2.style.backgroundImage = `url('${nextBg}')`;
+        bg2.style.opacity = 1;
+        bg1.style.opacity = 0;
+      } else {
+        bg1.style.backgroundImage = `url('${nextBg}')`;
+        bg1.style.opacity = 1;
+        bg2.style.opacity = 0;
+      }
+
+      showingBg1 = !showingBg1;
+    }
+
+    // Меняем фон каждые 6 секунд
+    setInterval(switchBackground, 10000);
+
+    // === МЯЧИ ===
+    const ballSize = 100;
+    const balls = [];
+
+    let speedValue = 100;
+    
+    const slider = document.getElementById('speedSlider');
+    const label = document.getElementById('speedLabel');
+    
+    slider.addEventListener('input', (e) => {
+      speedValue = parseInt(e.target.value);
+      label.textContent = `Скорость: ${speedValue}`;
+    });
+
+    function getRandomVelocity() {
+      const base = speedValue; // Прямо зависит от ползунка
+      return (Math.random() > 0.5 ? 1 : -1) * (base + Math.random() * base);
+    }
+    
+    function applyTurbulence(v) {
+      const variation = (Math.random() - 0.5) * (speedValue / 2);
+      return v + variation;
+    }
+
+
+
+    function createBall() {
+      const ball = document.createElement('div');
+      ball.classList.add('ball');
+      document.body.appendChild(ball);
+
+      const posX = Math.random() * (window.innerWidth - ballSize);
+      const posY = Math.random() * (window.innerHeight - ballSize);
+      const velocityX = getRandomVelocity();
+      const velocityY = getRandomVelocity();
+      const scale = 1;
+
+      balls.push({ el: ball, posX, posY, velocityX, velocityY, scale, scaleDirection: 1 });
+    }
+
+    function updateBalls() {
+      const maxX = window.innerWidth - ballSize;
+      const maxY = window.innerHeight - ballSize;
+
+      balls.forEach(ball => {
+        ball.velocityX = applyTurbulence(ball.velocityX);
+        ball.velocityY = applyTurbulence(ball.velocityY);
+
+        ball.posX += ball.velocityX;
+        ball.posY += ball.velocityY;
+
+        if (ball.posX <= 0 || ball.posX >= maxX) {
+          ball.velocityX = getRandomVelocity();
+          ball.posX = Math.max(0, Math.min(ball.posX, maxX));
+        }
+
+        if (ball.posY <= 0 || ball.posY >= maxY) {
+          ball.velocityY = getRandomVelocity();
+          ball.posY = Math.max(0, Math.min(ball.posY, maxY));
+        }
+
+        // Приближение / Удаление
+        ball.scale += 0.02 * ball.scaleDirection;
+        if (ball.scale >= 1.3 || ball.scale <= 0.7) {
+          ball.scaleDirection *= -1;
+        }
+
+        const angle = Math.random() * 360;
+        ball.el.style.left = ball.posX + 'px';
+        ball.el.style.top = ball.posY + 'px';
+        ball.el.style.transform = `scale(${ball.scale}) rotate(${angle}deg)`;
+      });
+
+      requestAnimationFrame(updateBalls);
+    }
+
+    document.getElementById('addBallBtn').addEventListener('click', createBall);
+    createBall();
+    updateBalls();
+  </script>
+</body>
+</html>

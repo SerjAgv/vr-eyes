@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Padel VR Pro: Elite Trainer</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene shadow="type: pcfsoft" cursor="rayOrigin: mouse" raycaster="objects: .clickable, .ball; interval: 10">
+      
+      <a-assets>
+        <img id="grid" src="https://img.freepik.com/free-vector/black-metal-wire-mesh-pattern-background_1017-26330.jpg">
+      </a-assets>
+
+      <a-sky color="#87CEEB"></a-sky>
+      <a-light type="ambient" intensity="0.6"></a-light>
+      <a-light type="directional" position="2 5 -3" intensity="0.8" castShadow="true"></a-light>
+
+      <a-plane position="0 0 -5" rotation="-90 0 0" width="10" height="20" color="#2e7d32" shadow></a-plane>
+      <a-plane position="0 0.02 -5" rotation="-90 0 0" width="0.1" height="20" color="white"></a-plane> 
+      <a-box position="0 0.5 -5" width="10" height="1" depth="0.1" material="src: #grid; repeat: 10 1; transparent: true; opacity: 0.6"></a-box>
+
+      <a-entity id="opponent-wrapper" position="0 1.2 -8">
+        <a-cylinder id="opponent" radius="0.5" height="2.4" color="#00ffff" 
+          material="emissive: #00ffff; emissiveIntensity: 0.8"
+          animation="property: position; to: 3.5 0 0; from: -3.5 0 0; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine">
+          
+          <a-sphere id="opp-target" class="clickable" radius="0.25" color="gold" 
+            position="0 0.5 0.6" visible="false"
+            material="emissive: #ffffff; emissiveIntensity: 1">
+            <a-text value="!!!" align="center" position="0 0 0.3" width="4" color="black"></a-text>
+          </a-sphere>
+          
+        </a-cylinder>
+      </a-entity>
+
+      <a-box id="target-left" class="clickable" position="-4.95 1.5 -4" width="0.1" height="2.5" depth="2" material="opacity: 0; transparent: true"></a-box>
+      <a-box id="target-right" class="clickable" position="4.95 1.5 -4" width="0.1" height="2.5" depth="2" material="opacity: 0; transparent: true"></a-box>
+
+      <a-entity id="rig">
+        <a-camera id="main-cam" look-controls wasd-controls-enabled="false">
+          <a-entity position="0 1.2 -3">
+            <a-entity id="hud">
+                <a-text id="level-txt" value="LEVEL 1" align="center" color="#00fff2" width="4" position="0 0.45 0"></a-text>
+                <a-text id="ball-stats" value="Score: 0" align="center" color="#ccff00" width="3" position="0 0.25 0"></a-text>
+                <a-text id="high-score-txt" value="BEST: 0" align="center" color="#ffeb3b" width="2.5" position="0 0.1 0"></a-text>
+                <a-text id="feedback-msg" value="" align="center" width="5" position="0 0.65 0"></a-text>
+                <a-text id="timer-txt" value="15:00" align="center" color="white" width="2" position="0 -0.45 0"></a-text>
+            </a-entity>
+
+            <a-entity id="results-panel" position="0 0 0.1" visible="false">
+                <a-plane width="4.5" height="3" color="#111" opacity="0.95"></a-plane>
+                <a-text id="final-stats" value="" align="center" color="white" width="4" position="0 0.3 0.01"></a-text>
+                <a-plane id="restart-btn" class="clickable" width="1.2" height="0.4" color="#2e7d32" position="0 -1 0.02">
+                    <a-text value="RESTART" align="center" color="white" width="3.5" position="0 0 0.01"></a-text>
+                </a-plane>
+            </a-entity>
+          </a-entity>
+        </a-camera>
+        <a-entity laser-controls="hand: left" raycaster="objects: .clickable, .ball; far: 20"></a-entity>
+        <a-entity laser-controls="hand: right" raycaster="objects: .clickable, .ball; far: 20"></a-entity>
+      </a-entity>
+
+      <script>
+        let stats = { score: 0, ballHit: 0, visionHit: 0, smartShots: 0, redBallErrors: 0 };
+        let level = 1, ballSpeed = 2200, timeLeft = 15 * 60, isGameOver = false;
+        let highScore = localStorage.getItem('padelVR_highScore') || 0;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        document.querySelector('#high-score-txt').setAttribute('value', `BEST: ${highScore}`);
+
+        function playSound(freq, vol=0.1, type='sine', dur=0.2) {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = type;
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+          osc.start(); osc.stop(audioCtx.currentTime + dur);
+        }
+        
+        
+        // Добавьте в объект stats новое поле
+        stats.opponentHits = 0; 
+        
+        function triggerOpponentMark() {
+          if (isGameOver) return;
+          
+          const target = document.querySelector('#opp-target');
+          const msg = document.querySelector('#feedback-msg');
+          
+          // Показываем мишень
+          target.setAttribute('visible', 'true');
+          // Важно: чтобы raycaster её видел, когда она появляется
+          target.classList.add('clickable'); 
+          
+          let clicked = false;
+          const handler = () => {
+            if (!clicked && !isGameOver) {
+              clicked = true;
+              stats.opponentHits++;
+              stats.score += 10; // Большая награда за внимательность
+              
+              playSound(1500, 0.2, 'triangle');
+              msg.setAttribute('value', 'CRITICAL HIT! +10');
+              msg.setAttribute('color', '#ffeb3b');
+              setTimeout(() => msg.setAttribute('value', ''), 800);
+              
+              target.setAttribute('visible', 'false');
+              updateUI();
+            }
+          };
+          
+          target.addEventListener('mousedown', handler);
+          
+          // Исчезает через 1.2 секунды, если не успели нажать
+          setTimeout(() => {
+            target.setAttribute('visible', 'false');
+            target.removeEventListener('mousedown', handler);
+          }, 1200);
+        }
+        
+        // Запускаем проверку появления знака каждые 4-6 секунд
+        setInterval(() => {
+          if (!isGameOver && Math.random() > 0.5) {
+            triggerOpponentMark();
+          }
+        }, 4000);
+
+        function calculateTacticalPoints() {
+          const cam = document.querySelector('#main-cam');
+          const oppX = document.querySelector('#opponent').object3D.getWorldPosition(new THREE.Vector3()).x;
+          const lookY = cam.object3D.rotation.y;
+          const msg = document.querySelector('#feedback-msg');
+
+          if ((oppX > 1 && lookY < -0.2) || (oppX < -1 && lookY > 0.2)) {
+            msg.setAttribute('value', 'BLOCKED! -1');
+            msg.setAttribute('color', '#ff4444');
+            playSound(150, 0.2, 'sawtooth');
+            setTimeout(() => msg.setAttribute('value', ''), 800);
+            return -1;
+          } else if ((oppX > 0 && lookY > 0.15) || (oppX < 0 && lookY < -0.15)) {
+            msg.setAttribute('value', 'SMART SHOT! +2');
+            msg.setAttribute('color', '#00ff00');
+            stats.smartShots++;
+            playSound(1200, 0.1);
+            setTimeout(() => msg.setAttribute('value', ''), 800);
+            return 2;
+          }
+          playSound(800, 0.1);
+          return 1;
+        }
+
+        function updateUI() {
+          document.querySelector('#ball-stats').setAttribute('value', `Score: ${stats.score}`);
+          if (stats.score > highScore) {
+            highScore = stats.score;
+            localStorage.setItem('padelVR_highScore', highScore);
+            document.querySelector('#high-score-txt').setAttribute('value', `BEST: ${highScore}`);
+          }
+          let totalActions = stats.ballHit + stats.visionHit;
+          if (totalActions > 0 && totalActions % 10 === 0) {
+            level = Math.floor(totalActions / 10) + 1;
+            document.querySelector('#level-txt').setAttribute('value', `LEVEL ${level}`);
+            ballSpeed = Math.max(300, 1500 - (level * 150));
+          }
+        }
+
+        function createSingleBall() {
+          if (isGameOver) return;
+          const ball = document.createElement('a-sphere');
+          const isRed = Math.random() < 0.25; // 25% шанс красного мяча
+          
+          ball.setAttribute('class', 'ball clickable');
+          ball.setAttribute('radius', '0.15');
+          ball.setAttribute('color', isRed ? '#ff0000' : '#ccff00');
+          if (isRed) ball.setAttribute('emissive', '#ff0000');
+
+          const side = Math.random() > 0.5 ? 1 : -1;
+          const p1 = { x: 4 * side * Math.random(), y: 0.2, z: -7 };
+          const p2 = { x: (Math.random()-0.5)*6, y: 1.2, z: 3 };
+          ball.setAttribute('position', `${(Math.random()-0.5)*2} 1.5 -2`);
+          ball.setAttribute('animation__1', { property: 'position', to: `${p1.x} ${p1.y} ${p1.z}`, dur: ballSpeed * 0.4, easing: 'linear' });
+          ball.setAttribute('animation__2', { property: 'position', from: `${p1.x} ${p1.y} ${p1.z}`, to: `${p2.x} ${p2.y} ${p2.z}`, dur: ballSpeed * 0.6, delay: ballSpeed * 0.4, easing: 'linear' });
+
+          ball.addEventListener('mousedown', function() {
+            if(!isGameOver) {
+              if (isRed) {
+                stats.score -= 3;
+                stats.redBallErrors++;
+                playSound(100, 0.3, 'square', 0.5);
+                const msg = document.querySelector('#feedback-msg');
+                msg.setAttribute('value', 'DANGER! -3');
+                msg.setAttribute('color', '#ff0000');
+                setTimeout(() => msg.setAttribute('value', ''), 600);
+              } else {
+                const p = calculateTacticalPoints();
+                stats.score += p;
+                if (p > 0) stats.ballHit++;
+              }
+              updateUI();
+              this.parentNode.removeChild(this);
+            }
+          });
+          document.querySelector('a-scene').appendChild(ball);
+          setTimeout(() => { if (ball.parentNode) ball.parentNode.removeChild(ball); }, ballSpeed + 500);
+        }
+
+            // В функции triggerFlash заменим логику обработки нажатия
+            function triggerFlash() {
+              if (isGameOver) return;
+              
+              const target = Math.random() > 0.5 ? document.querySelector('#target-left') : document.querySelector('#target-right');
+              const colors = ['#ff0000', '#00ff00', '#ffff00', '#00ffff']; // Красный, Зеленый, Желтый, Голубой
+              const flashColor = colors[Math.floor(Math.random() * colors.length)];
+              const isRed = flashColor === '#ff0000';
+              
+              // Визуализация вспышки
+              target.setAttribute('material', {
+                opacity: 0.8, 
+                transparent: false, 
+                color: flashColor, 
+                emissive: flashColor, 
+                emissiveIntensity: 2
+              });
+              
+              let clicked = false;
+              const msg = document.querySelector('#feedback-msg');
+              
+              const handler = () => {
+                if (!clicked && !isGameOver) {
+                  clicked = true;
+                  
+                  if (isRed) {
+                    // НАКАЗАНИЕ за нажатие на красный
+                    stats.score -= 5;
+                    stats.redBallErrors++; // Используем ту же статистику ошибок
+                    playSound(100, 0.4, 'sawtooth', 0.5);
+                    
+                    msg.setAttribute('value', 'WRONG TARGET! -5');
+                    msg.setAttribute('color', '#ff0000');
+                    setTimeout(() => msg.setAttribute('value', ''), 800);
+                  } else {
+                    // НАГРАДА за правильный цвет
+                    stats.visionHit++;
+                    stats.score += 3;
+                    playSound(1000, 0.1);
+                    
+                    msg.setAttribute('value', 'GREAT VISION! +3');
+                    msg.setAttribute('color', '#00ff00');
+                    setTimeout(() => msg.setAttribute('value', ''), 600);
+                  }
+                  
+                  // Скрываем цель сразу после клика
+                  target.setAttribute('material', {opacity: 0, transparent: true, emissiveIntensity: 0});
+                  updateUI();
+                  target.removeEventListener('mousedown', handler);
+                }
+              };
+              
+              target.addEventListener('mousedown', handler);
+              
+              // Автоматическое исчезновение через 1 секунду
+              setTimeout(() => {
+                target.setAttribute('material', {opacity: 0, transparent: true, emissiveIntensity: 0});
+                target.removeEventListener('mousedown', handler);
+                // Если красный исчез сам и на него не нажали — это хорошо (можно добавить микро-бонус за выдержку)
+              }, 1000);
+            }
+
+        setInterval(() => { if(!isGameOver) { createSingleBall(); setTimeout(createSingleBall, 400); } }, 2000);
+        setInterval(triggerFlash, 3000);
+        
+        setInterval(() => {
+          if (timeLeft > 0) {
+            timeLeft--;
+            const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+            document.querySelector('#timer-txt').setAttribute('value', `${m}:${s < 10 ? '0' : ''}${s}`);
+          } else if (!isGameOver) {
+            isGameOver = true;
+            document.querySelector('#hud').setAttribute('visible', 'false');
+            document.querySelector('#results-panel').setAttribute('visible', 'true');
+            document.querySelector('#final-stats').setAttribute('value', 
+              `FINAL SCORE: ${stats.score}\n\n` +
+              `Smart Shots: ${stats.smartShots}\n` +
+              `Trap Ball Errors: ${stats.redBallErrors}\n` +
+              // Внутри функции таймера, где формируется final-stats value:
+              `Opponent Tags: ${stats.opponentHits}\n` +
+              `Level Reached: ${level}\n` +
+              `BEST EVER: ${highScore}`);
+          }
+        }, 1000);
+        document.querySelector('#restart-btn').addEventListener('click', () => location.reload());
+      </script>
+    </a-scene>
+  </body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Eye Reaction Training</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    
+    .background {
+      position: absolute;
+      background-image: url('pdl_court/638486607b8cde34560210a7_private-res-padel-3.jpg');
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: -1;
+      transition: opacity 2s ease;
+    }
+
+/*
+    .tennis-ball {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #dffb4e, #aadd3b);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2em;
+      font-family: Arial, sans-serif;
+      color: black;
+      user-select: none;
+      box-shadow: 0 0 10px #dffb4e;
+    }
+    */
+    
+    .tennis-ball {
+    position: absolute;
+    width: 70px;
+    height: 70px;
+    background-image: url('pdl_court/pngtree-yellow-tennis-ball-bright-sports-equipment-outdoor-gear-isolated-on-a-png-image_12860496.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: transform 0.05s linear;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4em;
+      font-family: Arial, sans-serif;
+      color: black;
+      user-select: none;
+
+  
+    }
+
+    #startButton {
+      padding: 1em 2em;
+      font-size: 2em;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background-color: white;
+      color: black;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+
+  <button id="startButton">Старт</button>
+  
+  <div class="background" id="bg1"></div>
+  <div class="background" id="bg2" style="opacity: 0;"></div>
+
+  <script>
+    
+    // ФОНОВЫЕ ИЗОБРАЖЕНИЯ
+    const backgrounds = [
+      'pdl_court/green1.jpg',
+      'pdl_court/green2.jpg',
+      'pdl_court/green3.jpg',
+      'pdl_court/green4.jpg',
+      'pdl_court/green5.jpg',
+      'pdl_court/green6.jpg',
+      'pdl_court/green7.jpg',
+      'pdl_court/green8.jpg',
+      'pdl_court/green9.jpg',
+      'pdl_court/green10.jpg',
+      'pdl_court/green11.jpg',
+      'pdl_court/green12.jpg',
+      'pdl_court/green13.jpg',
+      'pdl_court/green14.jpg',
+      'pdl_court/green15.png',
+      'pdl_court/green16.jpg',
+      'pdl_court/green17.jpg',
+      'pdl_court/green18.jpg',
+      'pdl_court/green19.jpg',
+      'pdl_court/green20.jpg',
+      'pdl_court/green21.jpg',
+      'pdl_court/green22.jpg',
+      'pdl_court/green23.jpg',
+      'pdl_court/green24.jpg',
+      'pdl_court/green25.jpg',
+      'pdl_court/blue1.webp',
+      'pdl_court/blue2.webp',
+      'pdl_court/blue3.jpeg',
+      'pdl_court/blue3.webp',
+      'pdl_court/blue4.webp',
+      'pdl_court/blue5.webp',
+      'pdl_court/blue6.webp',
+      'pdl_court/blue7.webp',
+      'pdl_court/blue8.jpeg',
+      'pdl_court/people1.webp',
+      'pdl_court/people2.webp'
+      
+      
+      
+    ];
+    
+    
+    
+    let bgIndex = 0;
+    const bg1 = document.getElementById('bg1');
+    const bg2 = document.getElementById('bg2');
+    let showingBg1 = true;
+    
+    function switchBackground() {
+      bgIndex = (bgIndex + 1) % backgrounds.length;
+      const nextBg = backgrounds[bgIndex];
+      
+      if (showingBg1) {
+        bg2.style.backgroundImage = `url('${nextBg}')`;
+        bg2.style.opacity = 1;
+        bg1.style.opacity = 0;
+      } else {
+        bg1.style.backgroundImage = `url('${nextBg}')`;
+        bg1.style.opacity = 1;
+        bg2.style.opacity = 0;
+      }
+      
+      showingBg1 = !showingBg1;
+    }
+    
+    // Меняем фон каждые 6 секунд
+    setInterval(switchBackground, 4500);
+    
+    
+    const startButton = document.getElementById("startButton");
+
+    function getRandomPosition() {
+      const x = Math.random() * (window.innerWidth - 100);
+      const y = Math.random() * (window.innerHeight - 100);
+      return { x, y };
+    }
+
+    function startSession() {
+      startButton.style.display = "none";
+
+      const sessionDuration = (Math.random() * (320 - 10) + 10) * 1000;
+      const startTime = Date.now();
+
+      function showNumber() {
+        const now = Date.now();
+        if (now - startTime >= sessionDuration) {
+          const endMsg = document.createElement('div');
+          endMsg.textContent = "Конец";
+          endMsg.className = "tennis-ball";
+          endMsg.style.left = "50%";
+          endMsg.style.top = "50%";
+          endMsg.style.transform = "translate(-50%, -50%)";
+          document.body.appendChild(endMsg);
+          return;
+        }
+
+        const number = Math.floor(Math.random() * 9) + 1;
+        const div = document.createElement('div');
+        div.className = 'tennis-ball';
+        div.textContent = number;
+
+        const pos = getRandomPosition();
+        div.style.left = `${pos.x}px`;
+        div.style.top = `${pos.y}px`;
+
+        document.body.appendChild(div);
+
+        setTimeout(() => {
+          div.remove();
+        }, 350);
+ 
+        setTimeout(showNumber, 350);
+      }
+
+      showNumber();
+    }
+
+    startButton.addEventListener("click", startSession);
+  </script>
+</body>
+</html>
