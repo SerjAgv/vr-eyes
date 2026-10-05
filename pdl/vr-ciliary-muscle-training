@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VR Ciliary Muscle Training</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+        }
+        #ui h1 {
+            font-size: 20px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+        #ui .stats {
+            font-size: 14px;
+            opacity: 0.7;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+        #ui .stats span {
+            display: inline-block;
+            min-width: 80px;
+        }
+        #controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            display: flex;
+            gap: 12px;
+            pointer-events: none;
+        }
+        .btn {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff;
+            border-radius: 30px;
+            font-size: 14px;
+            cursor: pointer;
+            pointer-events: all;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .btn:hover {
+            background: rgba(255,255,255,0.2);
+            border-color: rgba(255,255,255,0.5);
+        }
+        .btn.active {
+            background: rgba(100, 200, 255, 0.3);
+            border-color: rgba(100, 200, 255, 0.8);
+        }
+        #startScreen {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a15 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: #fff;
+            transition: opacity 0.8s;
+        }
+        #startScreen h1 {
+            font-size: 32px;
+            font-weight: 200;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #startScreen p {
+            font-size: 14px;
+            opacity: 0.6;
+            max-width: 400px;
+            text-align: center;
+            line-height: 1.8;
+            margin-bottom: 40px;
+            padding: 0 20px;
+        }
+        #startScreen .btn {
+            padding: 16px 48px;
+            font-size: 16px;
+            border-color: rgba(100, 200, 255, 0.6);
+            background: rgba(100, 200, 255, 0.1);
+        }
+        #startScreen .btn:hover {
+            background: rgba(100, 200, 255, 0.25);
+        }
+        #enterVR {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 50;
+        }
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        @media (max-width: 600px) {
+            #ui h1 { font-size: 16px; }
+            #ui .stats { font-size: 12px; }
+            .btn { padding: 10px 18px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="startScreen">
+    <h1>CILLIARY TRAINING</h1>
+    <p>Следите за точкой фокуса. При приближении — расслабляйте взгляд, при удалении — фокусируйтесь вдаль. Тренировка укрепляет цилиарную мышцу глаза.</p>
+    <button class="btn" id="startBtn">НАЧАТЬ</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui" class="hidden">
+    <h1 id="modeLabel">РЕЖИМ: ПЛАВНЫЙ</h1>
+    <div class="stats">
+        <span id="distanceLabel">Дистанция: 0</span>
+        <span id="timeLabel">Время: 0с</span>
+        <span id="cycleLabel">Цикл: 0</span>
+    </div>
+</div>
+
+<div id="controls" class="hidden">
+    <button class="btn active" data-mode="smooth">Плавный</button>
+    <button class="btn" data-mode="step">Ступенчатый</button>
+    <button class="btn" data-mode="pulse">Пульс</button>
+    <button class="btn" id="pauseBtn">Пауза</button>
+</div>
+
+<button class="btn" id="enterVR">VR</button>
+
+<script>
+(function() {
+    'use strict';
+
+    // ========== КОНФИГУРАЦИЯ ==========
+    const CONFIG = {
+        nearZ: 0.3,          // ближняя точка (метры)
+        farZ: 4.0,           // дальняя точка (метры)
+        smoothSpeed: 0.4,    // скорость плавного режима (м/с)
+        stepDuration: 1.2,   // длительность шага (сек)
+        pulseDuration: 0.8,  // длительность пульсации
+        targetSize: 0.06,    // базовый размер цели
+        targetColorNear: '#ff4466',
+        targetColorFar: '#44aaff',
+        particleCount: 40,
+        trailLength: 30
+    };
+
+    // ========== CANVAS SETUP ==========
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let W = 0, H = 0;
+
+    function resize() {
+        W = window.innerWidth;
+        H = window.innerHeight;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ========== СОСТОЯНИЕ ==========
+    const state = {
+        mode: 'smooth',
+        running: false,
+        paused: false,
+        startTime: 0,
+        elapsed: 0,
+        cycles: 0,
+        z: CONFIG.farZ,
+        direction: -1,
+        phase: 0,
+        lastTime: 0,
+        trail: [],
+        particles: [],
+        rotation: 0,
+        pulse: 0,
+        pausedZ: 0
+    };
+
+    // ========== 3D ПРОЕКЦИЯ ==========
+    function project(x, y, z) {
+        // Простая перспективная проекция
+        const fov = 1.0; // фокусное расстояние
+        const scale = fov / (z + fov);
+        return {
+            x: W / 2 + x * scale * W * 0.5,
+            y: H / 2 + y * scale * W * 0.5,
+            scale: scale,
+            z: z
+        };
+    }
+
+    // ========== ЧАСТИЦЫ ==========
+    function initParticles() {
+        state.particles = [];
+        for (let i = 0; i < CONFIG.particleCount; i++) {
+            state.particles.push({
+                angle: (Math.PI * 2 * i) / CONFIG.particleCount + Math.random() * 0.3,
+                radius: 0.15 + Math.random() * 0.3,
+                speed: 0.1 + Math.random() * 0.3,
+                zOffset: Math.random() * 2 - 1,
+                size: 0.005 + Math.random() * 0.01,
+                hue: 200 + Math.random() * 60
+            });
+        }
+    }
+    initParticles();
+
+    // ========== UI ЭЛЕМЕНТЫ ==========
+    const ui = document.getElementById('ui');
+    const modeLabel = document.getElementById('modeLabel');
+    const distanceLabel = document.getElementById('distanceLabel');
+    const timeLabel = document.getElementById('timeLabel');
+    const cycleLabel = document.getElementById('cycleLabel');
+    const controls = document.getElementById('controls');
+    const startScreen = document.getElementById('startScreen');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    // ========== ЛОГИКА ТРЕНИРОВКИ ==========
+    function updateSmooth(dt) {
+        // Плавное движение между near и far
+        const range = CONFIG.farZ - CONFIG.nearZ;
+        const speed = CONFIG.smoothSpeed * range;
+
+        state.z += state.direction * speed * dt;
+
+        if (state.z <= CONFIG.nearZ) {
+            state.z = CONFIG.nearZ;
+            state.direction = 1;
+            state.cycles++;
+        } else if (state.z >= CONFIG.farZ) {
+            state.z = CONFIG.farZ;
+            state.direction = -1;
+            state.cycles++;
+        }
+    }
+
+    function updateStep(dt) {
+        // Ступенчатый режим: резкие переходы с паузами
+        state.phase += dt;
+        const totalPhase = CONFIG.stepDuration;
+
+        if (state.phase >= totalPhase) {
+            state.phase = 0;
+            state.direction *= -1;
+            state.cycles++;
+        }
+
+        // Быстрый переход в начале фазы
+        const t = Math.min(state.phase / (totalPhase * 0.3), 1);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        const fromZ = state.direction > 0 ? CONFIG.nearZ : CONFIG.farZ;
+        const toZ = state.direction > 0 ? CONFIG.farZ : CONFIG.nearZ;
+        state.z = fromZ + (toZ - fromZ) * eased;
+    }
+
+    function updatePulse(dt) {
+        // Пульсация: быстрое приближение и удаление
+        state.phase += dt;
+        const totalPhase = CONFIG.pulseDuration;
+
+        if (state.phase >= totalPhase) {
+            state.phase = 0;
+            state.direction *= -1;
+            state.cycles++;
+        }
+
+        const t = state.phase / totalPhase;
+        // Быстрое движение + пауза
+        let eased;
+        if (t < 0.4) {
+            const p = t / 0.4;
+            eased = p * p * (3 - 2 * p);
+        } else if (t < 0.6) {
+            eased = 1;
+        } else {
+            const p = (t - 0.6) / 0.4;
+            eased = 1 - p * p * (3 - 2 * p);
+        }
+
+        const fromZ = state.direction > 0 ? CONFIG.nearZ : CONFIG.farZ;
+        const toZ = state.direction > 0 ? CONFIG.farZ : CONFIG.nearZ;
+        state.z = fromZ + (toZ - fromZ) * eased;
+    }
+
+    function update(dt) {
+        if (state.paused) return;
+
+        state.elapsed += dt;
+
+        // Обновление позиции в зависимости от режима
+        switch (state.mode) {
+            case 'smooth': updateSmooth(dt); break;
+            case 'step': updateStep(dt); break;
+            case 'pulse': updatePulse(dt); break;
+        }
+
+        // Вращение
+        state.rotation += dt * 0.3;
+
+        // Пульсация размера
+        state.pulse = 0.5 + 0.5 * Math.sin(state.elapsed * 3);
+
+        // Трейл
+        const proj = project(0, 0, state.z);
+        state.trail.push({
+            x: proj.x,
+            y: proj.y,
+            scale: proj.scale,
+            z: state.z,
+            time: state.elapsed
+        });
+        if (state.trail.length > CONFIG.trailLength) {
+            state.trail.shift();
+        }
+
+        // Обновление UI
+        const distCm = Math.round(state.z * 100);
+        distanceLabel.textContent = `Дистанция: ${distCm}см`;
+        timeLabel.textContent = `Время: ${Math.floor(state.elapsed)}с`;
+        cycleLabel.textContent = `Цикл: ${state.cycles}`;
+    }
+
+    // ========== ОТРИСОВКА ==========
+    function drawBackground() {
+        // Градиентный фон в зависимости от глубины
+        const t = (state.z - CONFIG.nearZ) / (CONFIG.farZ - CONFIG.nearZ);
+        const r = Math.round(10 + t * 5);
+        const g = Math.round(10 + t * 15);
+        const b = Math.round(25 + t * 20);
+
+        const grad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H) * 0.7);
+        grad.addColorStop(0, `rgb(${r + 10}, ${g + 10}, ${b + 15})`);
+        grad.addColorStop(1, `rgb(${r}, ${g}, ${b})`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+
+        // Звёзды/точки на фоне (сетка глубины)
+        ctx.save();
+        const starCount = 30;
+        for (let i = 0; i < starCount; i++) {
+            const angle = (Math.PI * 2 * i) / starCount;
+            const r1 = 0.3 + (i % 3) * 0.2;
+            const z = 0.5 + ((i * 0.37 + state.elapsed * 0.1) % 3);
+            const p = project(Math.cos(angle) * r1, Math.sin(angle) * r1, z);
+
+            const alpha = Math.max(0, 1 - z / 4) * 0.3;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2 * p.scale, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(100, 150, 255, ${alpha})`;
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    function drawTrail() {
+        if (state.trail.length < 2) return;
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        for (let i = 1; i < state.trail.length; i++) {
+            const p0 = state.trail[i - 1];
+            const p1 = state.trail[i];
+            const alpha = (i / state.trail.length) * 0.4;
+
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.strokeStyle = `rgba(100, 180, 255, ${alpha})`;
+            ctx.lineWidth = 2 * p1.scale;
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    function drawParticles() {
+        ctx.save();
+        for (const p of state.particles) {
+            p.angle += p.speed * 0.016;
+            const x = Math.cos(p.angle + state.rotation * 0.5) * p.radius;
+            const y = Math.sin(p.angle + state.rotation * 0.5) * p.radius;
+            const z = state.z + p.zOffset * 0.5;
+
+            if (z < 0.1) continue;
+
+            const proj = project(x, y, z);
+            const size = p.size * proj.scale * W * 0.5;
+
+            if (size < 0.3) continue;
+
+            const alpha = Math.max(0, 1 - z / 5) * 0.6;
+            const grad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, size);
+            grad.addColorStop(0, `hsla(${p.hue}, 80%, 70%, ${alpha})`);
+            grad.addColorStop(1, `hsla(${p.hue}, 80%, 50%, 0)`);
+
+            ctx.beginPath();
+            ctx.arc(proj.x, proj.y, size, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    function drawTarget() {
+        const proj = project(0, 0, state.z);
+
+        // Интерполяция цвета: близко = красный, далеко = синий
+        const t = (state.z - CONFIG.nearZ) / (CONFIG.farZ - CONFIG.nearZ);
+        const r = Math.round(255 - t * 180);
+        const g = Math.round(70 + t * 100);
+        const b = Math.round(100 + t * 155);
+
+        const baseSize = CONFIG.targetSize * W * 0.5 * proj.scale;
+        const pulseSize = baseSize * (1 + state.pulse * 0.15);
+
+        // Внешнее свечение
+        ctx.save();
+        const glow = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, pulseSize * 4);
+        glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.6)`);
+        glow.addColorStop(0.3, `rgba(${r}, ${g}, ${b}, 0.2)`);
+        glow.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, pulseSize * 4, 0, Math.PI * 2);
+        ctx.fillStyle = glow;
+        ctx.fill();
+        ctx.restore();
+
+        // Основной круг
+        ctx.save();
+        const coreGrad = ctx.createRadialGradient(
+            proj.x - pulseSize * 0.3,
+            proj.y - pulseSize * 0.3,
+            0,
+            proj.x,
+            proj.y,
+            pulseSize
+        );
+        coreGrad.addColorStop(0, `rgba(255, 255, 255, 0.95)`);
+        coreGrad.addColorStop(0.3, `rgba(${r}, ${g}, ${b}, 0.9)`);
+        coreGrad.addColorStop(1, `rgba(${Math.round(r * 0.5)}, ${Math.round(g * 0.5)}, ${Math.round(b * 0.5)}, 0.8)`);
+
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, pulseSize, 0, Math.PI * 2);
+        ctx.fillStyle = coreGrad;
+        ctx.fill();
+
+        // Кольцо
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, pulseSize * 1.5, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.4)`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Внутренняя точка
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, pulseSize * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.restore();
+
+        // Линии-подсказки направления
+        if (!state.paused) {
+            ctx.save();
+            const dirAlpha = 0.15 + 0.1 * Math.sin(state.elapsed * 4);
+            ctx.strokeStyle = `rgba(100, 180, 255, ${dirAlpha})`;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 8]);
+            ctx.beginPath();
+            ctx.arc(proj.x, proj.y, pulseSize * 3, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawDepthIndicator() {
+        // Индикатор глубины слева
+        const barX = 30;
+        const barY = H / 2 - 150;
+        const barH = 300;
+        const barW = 6;
+
+        ctx.save();
+        // Фон
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.beginPath();
+        ctx.roundRect(barX - barW/2, barY, barW, barH, 3);
+        ctx.fill();
+
+        // Заполнение
+        const t = (state.z - CONFIG.nearZ) / (CONFIG.farZ - CONFIG.nearZ);
+        const fillH = barH * t;
+        const grad = ctx.createLinearGradient(0, barY + barH - fillH, 0, barY + barH);
+        grad.addColorStop(0, 'rgba(100, 180, 255, 0.8)');
+        grad.addColorStop(1, 'rgba(255, 100, 150, 0.8)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(barX - barW/2, barY + barH - fillH, barW, fillH, 3);
+        ctx.fill();
+
+        // Метки
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText('БЛИЗКО', barX + 15, barY + barH + 5);
+        ctx.fillText('ДАЛЕКО', barX + 15, barY + 5);
+        ctx.restore();
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, W, H);
+        drawBackground();
+        drawTrail();
+        drawParticles();
+        drawTarget();
+        drawDepthIndicator();
+    }
+
+    // ========== ИГРОВОЙ ЦИКЛ ==========
+    let animFrameId = null;
+    let lastTimestamp = 0;
+
+    function gameLoop(timestamp) {
+        const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
+        lastTimestamp = timestamp;
+
+        if (state.running) {
+            update(dt);
+            render();
+        }
+
+        animFrameId = requestAnimationFrame(gameLoop);
+    }
+
+    // ========== УПРАВЛЕНИЕ ==========
+    function startTraining() {
+        state.running = true;
+        state.paused = false;
+        state.startTime = performance.now();
+        state.elapsed = 0;
+        state.cycles = 0;
+        state.z = CONFIG.farZ;
+        state.direction = -1;
+        state.phase = 0;
+        state.trail = [];
+        lastTimestamp = performance.now();
+
+        startScreen.classList.add('hidden');
+        ui.classList.remove('hidden');
+        controls.classList.remove('hidden');
+
+        if (!animFrameId) {
+            animFrameId = requestAnimationFrame(gameLoop);
+        }
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+        startTraining();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+        state.paused = !state.paused;
+        pauseBtn.textContent = state.paused ? 'Продолжить' : 'Пауза';
+        pauseBtn.classList.toggle('active', state.paused);
+    });
+
+    // Переключение режимов
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.mode = btn.dataset.mode;
+            state.phase = 0;
+            state.trail = [];
+
+            const names = { smooth: 'ПЛАВНЫЙ', step: 'СТУПЕНЧАТЫЙ', pulse: 'ПУЛЬС' };
+            modeLabel.textContent = `РЕЖИМ: ${names[state.mode]}`;
+        });
+    });
+
+    // ========== VR ПОДДЕРЖКА ==========
+    document.getElementById('enterVR').addEventListener('click', async () => {
+        if (navigator.xr) {
+            try {
+                const session = await navigator.xr.requestSession('immersive-vr', {
+                    optionalFeatures: ['local-floor', 'bounded-floor']
+                });
+                // Базовая поддержка VR — WebXR рендеринг
+                if (session) {
+                    // Перенаправляем канвас в VR сессию
+                    session.addEventListener('end', () => {
+                        // Возврат к обычному режиму
+                    });
+
+                    // Для полноценной VR нужен WebGL, но для тренировки
+                    // достаточно и 2D режима с большим FOV
+                    // Просто показываем сообщение
+                    alert('Для полноценного VR режима используйте браузер Oculus с WebXR поддержкой');
+                }
+            } catch (e) {
+                console.log('VR недоступен:', e.message);
+                // Fallback — fullscreen
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                }
+            }
+        } else {
+            // Fallback — fullscreen для Quest 2 в браузере
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            }
+        }
+    });
+
+    // ========== TOUCH УПРАВЛЕНИЕ ДЛЯ QUEST ==========
+    // Тап по экрану — пауза
+    let touchStartTime = 0;
+    canvas.addEventListener('touchstart', (e) => {
+        touchStartTime = Date.now();
+    });
+
+    canvas.addEventListener('touchend', (e) => {
+        if (Date.now() - touchStartTime < 300) {
+            // Короткий тап — пауза
+            state.paused = !state.paused;
+            pauseBtn.textContent = state.paused ? 'Продолжить' : 'Пауза';
+            pauseBtn.classList.toggle('active', state.paused);
+        }
+    });
+
+    // ========== КЛАВИАТУРА ==========
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            state.paused = !state.paused;
+            pauseBtn.textContent = state.paused ? 'Продолжить' : 'Пауза';
+        }
+        if (e.code === 'Digit1') document.querySelector('[data-mode="smooth"]').click();
+        if (e.code === 'Digit2') document.querySelector('[data-mode="step"]').click();
+        if (e.code === 'Digit3') document.querySelector('[data-mode="pulse"]').click();
+    });
+
+    // ========== ПРЕДОТВРАЩЕНИЕ СКРОЛЛА ==========
+    document.addEventListener('touchmove', (e) => {
+        if (e.target === canvas) e.preventDefault();
+    }, { passive: false });
+
+    // ========== ИНИЦИАЛИЗАЦИЯ ==========
+    // Полифилл для roundRect
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            this.moveTo(x + r, y);
+            this.arcTo(x + w, y, x + w, y + h, r);
+            this.arcTo(x + w, y + h, x, y + h, r);
+            this.arcTo(x, y + h, x, y, r);
+            this.arcTo(x, y, x + w, y, r);
+            this.closePath();
+            return this;
+        };
+    }
+
+    // Стартовый рендер
+    render();
+
+})();
+</script>
+</body>
+</html>
